@@ -1,7 +1,4 @@
-Gjiih:
-import os
-
-code_content = """package com.zeko.player
+package com.zeko.player
 
 import android.content.Context
 import android.os.Handler
@@ -26,7 +23,7 @@ class AutoSubtitleManager(
     private val context: Context,
     private val player: Player,
     private val subtitleTextView: TextView,
-    private val apiKey: String // مفتاح الـ API الخاص بـ OpenAI
+    private val apiKey: String
 ) {
     private val subtitlesList = mutableListOf<SubtitleItem>()
     private val handler = Handler(Looper.getMainLooper())
@@ -35,16 +32,14 @@ class AutoSubtitleManager(
             if (player.isPlaying) {
                 updateSubtitle(player.currentPosition)
             }
-            handler.postDelayed(this, 300) // تحديث كل 300 جزء من الثانية للمزامنة الدقيقة
+            handler.postDelayed(this, 300)
         }
     }
 
     init {
-        // بدء مراقبة وقت التشغيل لعرض الترجمة بالتزامن مع الفيديو
         handler.post(updateRunnable)
     }
 
-    // تحديث النص الظاهر على الشاشة بناءً على وقت الفيديو الحالي
     private fun updateSubtitle(currentPositionMs: Long) {
         val currentSub = subtitlesList.find { 
             currentPositionMs in it.startTimeMs..it.endTimeMs 
@@ -52,7 +47,6 @@ class AutoSubtitleManager(
         subtitleTextView.text = currentSub?.text ?: ""
     }
 
-    // دالة إرسال ملف الصوت واستخراج الترجمة وترجمتها للعربية
     fun processAndTranslateAudio(audioFile: File) {
         val client = OkHttpClient.Builder()
             .connectTimeout(60, TimeUnit.SECONDS)
@@ -64,7 +58,7 @@ class AutoSubtitleManager(
             .addFormDataPart("file", audioFile.name, audioFile.asRequestBody("audio/*".toMediaTypeOrNull()))
             .addFormDataPart("model", "whisper-1")
             .addFormDataPart("response_format", "verbose_json")
-            .addFormDataPart("language", "ar") // تحديد اللغة العربية للترجمة الفورية
+            .addFormDataPart("language", "ar")
             .build()
 
         val request = Request.Builder()
@@ -86,7 +80,6 @@ class AutoSubtitleManager(
         })
     }
 
-    // تحليل نتيجة الـ JSON وتحويلها لقائمة أوقات ونصوص متسلسلة
     private fun parseWhisperResponse(jsonResponse: String) {
         try {
             val jsonObject = JSONObject(jsonResponse)
@@ -112,13 +105,7 @@ class AutoSubtitleManager(
         }
     }
 
-    // تنظيف الموارد وإيقاف الـ Handler لمنع استهلاك الذاكرة
     fun release() {
         handler.removeCallbacks(updateRunnable)
     }
 }
-"""
-
-file_path = "AutoSubtitleManager.kt"
-with open(file_path, "w", encoding="utf-8") as f:
-    f.write(code_content)

@@ -34,6 +34,7 @@ import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.LruCache
 import android.util.Size
+import android.util.TypedValue
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
@@ -249,6 +250,9 @@ class MainActivity : Activity() {
     private var pipAuto: Boolean
         get() = prefs.getBoolean("pipAuto", true)
         set(v) { prefs.edit().putBoolean("pipAuto", v).apply() }
+    private var subtitleSizeSp: Int
+        get() = prefs.getInt("subtitleSizeSp", 20)
+        set(v) { prefs.edit().putInt("subtitleSizeSp", v).apply() }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
@@ -1183,6 +1187,21 @@ class MainActivity : Activity() {
             ) { pipAuto = it }
         )
 
+        settingsList.addView(sectionTitle("SUBTITLES"))
+        settingsList.addView(settingRow("Subtitle text size", "${subtitleSizeSp}sp · Applies to on-screen subtitles") {
+            val sizes = intArrayOf(16, 20, 24, 28)
+            val labels = arrayOf("Small · 16sp", "Normal · 20sp", "Large · 24sp", "Extra large · 28sp")
+            AlertDialog.Builder(this)
+                .setTitle("Subtitle text size")
+                .setSingleChoiceItems(labels, sizes.indexOf(subtitleSizeSp).coerceAtLeast(0)) { d, w ->
+                    subtitleSizeSp = sizes[w]
+                    applySubtitleSize()
+                    d.dismiss()
+                    openSettings()
+                }
+                .show()
+        })
+
         settingsList.addView(sectionTitle("SEEK BAR"))
         settingsList.addView(
             switchRow("Video Seek Preview", "Show a thumbnail while you drag the seek bar", previewOn) {
@@ -1222,6 +1241,14 @@ class MainActivity : Activity() {
 
         home.visibility = View.GONE
         settingsPage.visibility = View.VISIBLE
+    }
+
+    private fun applySubtitleSize() {
+        if (::playerView.isInitialized) {
+            playerView.subtitleView?.setFixedTextSize(
+                TypedValue.COMPLEX_UNIT_SP, subtitleSizeSp.toFloat()
+            )
+        }
     }
 
     private fun closeSettings() {
@@ -1298,6 +1325,7 @@ class MainActivity : Activity() {
             useController = false
             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
         }
+        applySubtitleSize()
 
         val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean {

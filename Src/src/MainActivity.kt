@@ -10,6 +10,7 @@ import android.os.Looper
 import android.util.Rational
 import android.content.ContentUris
 import android.content.Intent
+import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -65,12 +66,18 @@ import org.json.JSONArray
 import org.json.JSONObject
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.TeeAudioProcessor
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.DefaultTimeBar
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.TimeBar
 import java.util.Locale
+import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReferenceArray
@@ -91,6 +98,7 @@ class CardHolder(
     var id: Long = -1L
 }
 
+@OptIn(UnstableApi::class)
 class MainActivity : Activity() {
 
     private var player: ExoPlayer? = null
@@ -99,6 +107,15 @@ class MainActivity : Activity() {
     private var currentSubtitleStartPosition: Long = 0L
     private var speechEngine: TextToSpeech? = null
     private var speechReady = false
+
+    @Volatile private var liveTranslationEnabled = false
+    private var liveAudioSink: VoskPcmTeeSink? = null
+    private var speechRecognizer: LocalSpeechRecognizer? = null
+    private var localTranslator: LocalArabicTranslator? = null
+    private var speechModelReady = false
+    private var translationModelReady = false
+    private var liveTranslationOverlay: TextView? = null
+    private val speechExec = Executors.newSingleThreadExecutor()
 
     private lateinit var root: FrameLayout
     private lateinit var home: LinearLayout
@@ -1342,6 +1359,7 @@ class MainActivity : Activity() {
             addView(chip("📚  Save word") { saveSubtitleWord() })
             addView(chip("↶  Replay 0.75x") { replayCurrentSubtitle() })
             addView(chip("🔊  Speak") { speakCurrentSubtitle() })
+            addView(chip("🌐  Live AR") { toggleLiveTranslation() })
         }
         val actionScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -1414,6 +1432,28 @@ class MainActivity : Activity() {
             watermark,
             FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply {
                 topMargin = dp(70)
+            }
+        )
+        liveTranslationOverlay = TextView(this).apply {
+            textSize = 21f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            textDirection = View.TEXT_DIRECTION_RTL
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.parseColor("#D9000000"))
+                setStroke(dp(1), accent)
+            }
+            visibility = View.GONE
+            maxLines = 4
+        }
+        root.addView(
+            liveTranslationOverlay,
+            FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+                leftMargin = dp(24)
+                rightMargin = dp(24)
+                bottomMargin = dp(126)
             }
         )
         setupSeekPreview()
@@ -1981,7 +2021,48 @@ class MainActivity : Activity() {
         player?.release()
         currentUri = uri
 
-        val p = ExoPlayer.Builder(this).build()
+        liveAudioSink?.enabled = false
+        val pcmSink = VoskPcmTeeSink { pcm ->
+            if (liveTranslationEnabled) {
+                speechExec.execute {
+                    try {
+                        val spoken = speechRecognizer?.acceptAudioFinal(pcm)
+                        if (!spoken.isNullOrBlank()) {
+                            localTranslator?.takeIf { it.isReady() }?.translate(spoken)
+                                ?.addOnSuccessListener { arabic ->
+                                    runOnUiThread {
+                                        if (liveTranslationEnabled) {
+                                            liveTranslationOverlay?.text = arabic
+                                            liveTranslationOverlay?.visibility = View.VISIBLE
+                                        }
+                                    }
+                                }
+                                ?.addOnFailureListener {
+                                    runOnUiThread { toast("تعذرت ترجمة هذا المقطع") }
+                                }
+                        }
+                    } catch (error: Exception) {
+                        runOnUiThread { toast("تعذر التعرف على الكلام: " + (error.localizedMessage ?: "خطأ")) }
+                    }
+                }
+            }
+        }
+        liveAudioSink = pcmSink
+        pcmSink.enabled = liveTranslationEnabled
+        val teeProcessor = TeeAudioProcessor(pcmSink)
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioOutputPlaybackParams: Boolean
+            ): AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(false)
+                    .setAudioProcessors(arrayOf(teeProcessor))
+                    .build()
+            }
+        }
+        val p = ExoPlayer.Builder(this, renderersFactory).build()
         player = p
         playerView.player = p
         playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -2070,6 +2151,118 @@ class MainActivity : Activity() {
         }
     }
 
+
+    // ---------- Live English speech -> Arabic subtitles ----------
+    private fun toggleLiveTranslation() {
+        if (liveTranslationEnabled) {
+            liveTranslationEnabled = false
+            liveAudioSink?.enabled = false
+            liveTranslationOverlay?.visibility = View.GONE
+            toast("تم إيقاف الترجمة الفورية")
+            return
+        }
+        if (speechModelReady && translationModelReady && speechRecognizer != null &&
+            localTranslator?.isReady() == true
+        ) {
+            enableLiveTranslation()
+            return
+        }
+
+        val installer = VoskModelInstaller(this)
+        if (installer.isInstalled()) {
+            prepareLiveModels(installer.modelDirectory())
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("إعداد الترجمة الفورية")
+            .setMessage("سيتم تنزيل نموذج إنجليزي حجمه نحو 40MB. بعد التنزيل يعمل التعرف والترجمة محلياً.")
+            .setPositiveButton("تنزيل وبدء") { _, _ ->
+                val loading = AlertDialog.Builder(this)
+                    .setTitle("تنزيل نموذج الصوت")
+                    .setMessage("يرجى الانتظار...")
+                    .setCancelable(false)
+                    .create()
+                loading.show()
+                installer.install(
+                    onProgress = { value ->
+                        runOnUiThread {
+                            if (!isFinishing) loading.setMessage("تنزيل النموذج: " + value + "%")
+                        }
+                    },
+                    onComplete = { result ->
+                        runOnUiThread {
+                            loading.dismiss()
+                            result.onSuccess { dir -> prepareLiveModels(dir) }
+                                .onFailure { error ->
+                                    toast("فشل تنزيل النموذج: " + (error.localizedMessage ?: "تحقق من الإنترنت"))
+                                }
+                        }
+                    }
+                )
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun prepareLiveModels(modelDirectory: File) {
+        toast("جاري تجهيز التعرف الصوتي والترجمة...")
+        speechExec.execute {
+            try {
+                val recognizer = LocalSpeechRecognizer(modelDirectory.absolutePath)
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) {
+                        recognizer.close()
+                        return@runOnUiThread
+                    }
+                    try { speechRecognizer?.close() } catch (_: Exception) { }
+                    speechRecognizer = recognizer
+                    speechModelReady = true
+                    if (localTranslator == null) {
+                        val translator = LocalArabicTranslator(
+                            onReady = {
+                                runOnUiThread {
+                                    translationModelReady = true
+                                    if (speechModelReady) enableLiveTranslation()
+                                }
+                            },
+                            onError = { error ->
+                                runOnUiThread { toast("تعذر تجهيز الترجمة: " + error) }
+                            }
+                        )
+                        localTranslator = translator
+                        translator.prepare()
+                    } else if (localTranslator?.isReady() == true) {
+                        translationModelReady = true
+                        enableLiveTranslation()
+                    } else {
+                        localTranslator?.prepare()
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    toast("تعذر تشغيل نموذج الصوت: " + (error.localizedMessage ?: "خطأ"))
+                }
+            }
+        }
+    }
+
+    private fun enableLiveTranslation() {
+        if (!speechModelReady || !translationModelReady ||
+            speechRecognizer == null || localTranslator?.isReady() != true
+        ) return
+        val sink = liveAudioSink
+        if (sink == null) {
+            toast("افتح فيديو أولاً ثم فعّل الترجمة")
+            return
+        }
+        liveTranslationEnabled = true
+        sink.enabled = true
+        liveTranslationOverlay?.text = "أستمع إلى الكلام الإنجليزي..."
+        liveTranslationOverlay?.visibility = View.VISIBLE
+        toast("الترجمة الفورية تعمل")
+    }
+
     private fun stopAndGoHome() {
         savePosition()
         stripGen++
@@ -2083,6 +2276,18 @@ class MainActivity : Activity() {
         currentUri = null
         playerView.player = null
         previewBox.visibility = View.GONE
+        liveTranslationEnabled = false
+        liveAudioSink?.enabled = false
+        liveAudioSink = null
+        liveTranslationOverlay?.visibility = View.GONE
+        speechExec.execute {
+            try { speechRecognizer?.close() } catch (_: Exception) { }
+            speechRecognizer = null
+        }
+        speechModelReady = false
+        translationModelReady = false
+        localTranslator?.close()
+        localTranslator = null
         ui.removeCallbacks(ticker)
         ui.removeCallbacks(hideRunnable)
         stopBgService()
@@ -2198,6 +2403,11 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        liveTranslationEnabled = false
+        liveAudioSink?.enabled = false
+        try { speechRecognizer?.close() } catch (_: Exception) { }
+        localTranslator?.close()
+        speechExec.shutdownNow()
         super.onDestroy()
         ui.removeCallbacks(ticker)
         ui.removeCallbacks(hideRunnable)

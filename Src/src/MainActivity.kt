@@ -19,6 +19,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.media.AudioManager
 import android.media.MediaMetadataRetriever
 import android.net.Uri
@@ -1150,10 +1151,18 @@ class MainActivity : Activity() {
         typeface = Typeface.DEFAULT_BOLD
         gravity = Gravity.CENTER
         setPadding(dp(14), dp(7), dp(14), dp(7))
-        background = GradientDrawable().apply {
+        val shape = GradientDrawable().apply {
             cornerRadius = dp(18).toFloat()
-            setColor(Color.parseColor("#40FFFFFF"))
+            setColor(Color.parseColor("#20232D"))
+            setStroke(dp(1), Color.parseColor("#3DFF6D00"))
         }
+        background = RippleDrawable(
+            ColorStateList.valueOf(Color.parseColor("#44FFFFFF")),
+            shape,
+            null
+        )
+        minHeight = dp(42)
+        elevation = dp(1).toFloat()
         layoutParams = LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) }
         setOnClickListener { onClick() }
     }
@@ -1166,7 +1175,8 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
                 setShape(GradientDrawable.OVAL)
-                setColor(Color.parseColor("#66000000"))
+                setColor(if (label == "▶" || label == "Ⅱ") accent else Color.parseColor("#30303A"))
+                setStroke(dp(1), Color.parseColor("#55FFFFFF"))
             }
             layoutParams = LinearLayout.LayoutParams(dp(size), dp(size)).apply {
                 leftMargin = dp(18)
@@ -1306,9 +1316,9 @@ class MainActivity : Activity() {
         val centerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            addView(circleBtn("⏪", 60, 22f) { seekBy(-1); scheduleHide() })
+            addView(circleBtn("−10s", 60, 14f) { seekBy(-1); scheduleHide() })
             addView(playBtn)
-            addView(circleBtn("⏩", 60, 22f) { seekBy(1); scheduleHide() })
+            addView(circleBtn("+10s", 60, 14f) { seekBy(1); scheduleHide() })
         }
 
         // ----- bottom: time bar + actions -----
@@ -1398,7 +1408,7 @@ class MainActivity : Activity() {
         }
 
         lockOverlay = TextView(this).apply {
-            text = "🔓  Unlock"
+            text = "Unlock"
             textSize = 16f
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD

@@ -2,7 +2,7 @@ name: ZEKO Player Release APK
 
 on:
   push:
-    branches: ["main", "master", "madlad-translation-integration"]
+    branches: ["main", "master", "madlad-translation-integration", "zeko-player-polish"]
   workflow_dispatch:
 
 permissions:
@@ -32,7 +32,7 @@ jobs:
       - name: Prepare clean APK filename
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk dist/ZEKO-Player.apk
+          cp build/outputs/apk/release/app-release.apk dist/ZEKO-Player.apk
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4

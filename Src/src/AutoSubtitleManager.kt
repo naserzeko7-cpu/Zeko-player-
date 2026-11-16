@@ -5,9 +5,13 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.TextView
 import androidx.media3.common.Player
-import okhttp3.*
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.Response
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -53,8 +57,8 @@ class AutoSubtitleManager(
             .readTimeout(60, TimeUnit.SECONDS)
             .build()
 
-        val requestBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
+        val requestBody = okhttp3.MultipartBody.Builder()
+            .setType(okhttp3.MultipartBody.FORM)
             .addFormDataPart("file", audioFile.name, audioFile.asRequestBody("audio/*".toMediaTypeOrNull()))
             .addFormDataPart("model", "whisper-1")
             .addFormDataPart("response_format", "verbose_json")
@@ -72,9 +76,12 @@ class AutoSubtitleManager(
                 e.printStackTrace()
             }
 
-            override fun onResponse(call: Response, response: Response) {
+            override fun onResponse(call: Call, response: Response) {
                 if (response.isSuccessful) {
-                    response.body?.string()?.let { parseWhisperResponse(it) }
+                    val responseBodyString = response.body?.string()
+                    if (responseBodyString != null) {
+                        parseWhisperResponse(responseBodyString)
+                    }
                 }
             }
         })

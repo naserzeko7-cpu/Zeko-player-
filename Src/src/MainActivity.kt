@@ -1169,6 +1169,13 @@ class MainActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
+    private fun setPlayerGlyph(view: TextView, resource: Int) {
+        val icon = getDrawable(resource)?.mutate()
+        icon?.setTint(Color.WHITE)
+        view.text = ""
+        view.setCompoundDrawablesWithIntrinsicBounds(null, icon, null, null)
+    }
+
     private fun circleBtn(label: String, size: Int, textSp: Float, onClick: () -> Unit): TextView =
         TextView(this).apply {
             text = label
@@ -1181,9 +1188,18 @@ class MainActivity : Activity() {
                 setStroke(dp(1), Color.parseColor("#55FFFFFF"))
             }
             layoutParams = LinearLayout.LayoutParams(dp(size), dp(size)).apply {
-                leftMargin = dp(18)
-                rightMargin = dp(18)
+                leftMargin = dp(8)
+                rightMargin = dp(8)
             }
+            when (label) {
+                "❚❚" -> setPlayerGlyph(this, R.drawable.ic_pause)
+                "▶" -> setPlayerGlyph(this, R.drawable.ic_play)
+                "−10s" -> setPlayerGlyph(this, R.drawable.ic_rewind)
+                "+10s" -> setPlayerGlyph(this, R.drawable.ic_forward)
+                "‹" -> setPlayerGlyph(this, R.drawable.ic_skip_previous)
+                "›" -> setPlayerGlyph(this, R.drawable.ic_skip_next)
+            }
+            contentDescription = label
             setOnClickListener { onClick() }
         }
 
@@ -1318,9 +1334,11 @@ class MainActivity : Activity() {
         val centerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            addView(circleBtn("−10s", 60, 14f) { seekBy(-1); scheduleHide() })
+            addView(circleBtn("‹", 48, 18f) { playPreviousVideo(); scheduleHide() })
+            addView(circleBtn("−10s", 54, 14f) { seekBy(-1); scheduleHide() })
             addView(playBtn)
-            addView(circleBtn("+10s", 60, 14f) { seekBy(1); scheduleHide() })
+            addView(circleBtn("+10s", 54, 14f) { seekBy(1); scheduleHide() })
+            addView(circleBtn("›", 48, 18f) { playNextVideo(); scheduleHide() })
         }
 
         // ----- bottom: time bar + actions -----
@@ -2121,7 +2139,7 @@ class MainActivity : Activity() {
                     prefs.edit().remove("p:" + uri).apply()
                     if (!endDialogShown) {
                         endDialogShown = true
-                        showEndOfVideoDialog()
+                        playNextVideo()
                     }
                 }
             }
@@ -2136,7 +2154,7 @@ class MainActivity : Activity() {
         p.setHandleAudioBecomingNoisy(true)
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                playBtn.text = if (isPlaying) "❚❚" else "▶"
+                setPlayerGlyph(playBtn, if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play)
                 if (isPlaying) scheduleHide() else ui.removeCallbacks(hideRunnable)
             }
         })
@@ -2145,7 +2163,7 @@ class MainActivity : Activity() {
         if (start > 0L) toast("Resumed from " + formatTime(start))
         locked = false
         lockOverlay.visibility = View.GONE
-        playBtn.text = "❚❚"
+        setPlayerGlyph(playBtn, R.drawable.ic_pause)
         showControls()
         ui.removeCallbacks(ticker)
         ui.post(ticker)
@@ -2188,31 +2206,20 @@ class MainActivity : Activity() {
     }
 
 
+    private fun playbackQueue(): List<VideoItem> = if (shown.isNotEmpty()) shown else videos
+
     private fun playNextVideo() {
-        val current = currentUri ?: return
-        val playlist = if (shown.isNotEmpty()) shown else videos
-        val index = playlist.indexOfFirst { it.uri == current }
-        val next = playlist.getOrNull(index + 1)
-        if (next == null) {
-            toast("No next video")
-            return
-        }
+        val queue = playbackQueue()
+        val index = queue.indexOfFirst { it.uri == currentUri }
+        val next = queue.getOrNull(index + 1) ?: return
         play(next.uri, next.name)
     }
 
-    private fun showEndOfVideoDialog() {
-        if (isFinishing || isDestroyed) return
-        AlertDialog.Builder(this)
-            .setTitle("Video finished")
-            .setMessage("What would you like to do?")
-            .setPositiveButton("Replay current video") { _, _ ->
-                player?.seekTo(0L)
-                player?.play()
-                showControls()
-            }
-            .setNegativeButton("Play next video") { _, _ -> playNextVideo() }
-            .setNeutralButton("Close", null)
-            .show()
+    private fun playPreviousVideo() {
+        val queue = playbackQueue()
+        val index = queue.indexOfFirst { it.uri == currentUri }
+        val previous = queue.getOrNull(index - 1) ?: return
+        play(previous.uri, previous.name)
     }
 
     private fun requestMadladEndpoint() {

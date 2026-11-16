@@ -1393,7 +1393,6 @@ class MainActivity : Activity() {
             addView(chip("Save word") { saveSubtitleWord() })
             addView(chip("Replay line") { replayCurrentSubtitle() })
             addView(chip("Speak") { speakCurrentSubtitle() })
-            addView(chip("Next video") { playNextVideo() })
         }
         val actionScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false

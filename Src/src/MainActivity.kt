@@ -26,6 +26,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
@@ -94,6 +95,9 @@ class MainActivity : Activity() {
     private var player: ExoPlayer? = null
     private var currentUri: Uri? = null
     private var currentSubtitleLine: String = ""
+    private var currentSubtitleStartPosition: Long = 0L
+    private var speechEngine: TextToSpeech? = null
+    private var speechReady = false
 
     private lateinit var root: FrameLayout
     private lateinit var home: LinearLayout
@@ -602,6 +606,56 @@ class MainActivity : Activity() {
             type = "*/*"
         }
         startActivityForResult(i, REQ_SUB)
+    }
+
+    private fun replayCurrentSubtitle() {
+        val p = player ?: return
+        if (currentSubtitleLine.isBlank()) {
+            toast("Wait for a subtitle line first")
+            return
+        }
+        val target = (currentSubtitleStartPosition - 250L).coerceAtLeast(0L)
+        p.seekTo(target)
+        speed = 0.75f
+        p.setPlaybackSpeed(speed)
+        speedBtn.text = "0.75x"
+        p.play()
+        showHud("Replay  •  0.75x")
+        scheduleHide()
+    }
+
+    private fun speakCurrentSubtitle() {
+        val line = currentSubtitleLine.trim()
+        if (line.isBlank()) {
+            toast("No subtitle text to speak yet")
+            return
+        }
+        val engine = speechEngine
+        if (engine != null && speechReady) {
+            engine.speak(line, TextToSpeech.QUEUE_FLUSH, null, "zeko-subtitle-speech")
+            return
+        }
+        if (engine != null) {
+            toast("Voice is still getting ready")
+            return
+        }
+        speechEngine = TextToSpeech(this) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val tts = speechEngine
+                if (tts != null) {
+                    val result = tts.setLanguage(Locale.US)
+                    speechReady = result != TextToSpeech.LANG_MISSING_DATA &&
+                        result != TextToSpeech.LANG_NOT_SUPPORTED
+                    if (speechReady) {
+                        tts.speak(line, TextToSpeech.QUEUE_FLUSH, null, "zeko-subtitle-speech")
+                    } else {
+                        toast("English voice data is not installed on this device")
+                    }
+                }
+            } else {
+                toast("Text-to-speech is unavailable")
+            }
+        }
     }
 
     private fun saveSubtitleWord() {
@@ -1285,6 +1339,8 @@ class MainActivity : Activity() {
             addView(chip("🔒  Lock") { lockScreen() })
             addView(chip("🔄  Rotate") { cycleOrientation(); scheduleHide() })
             addView(chip("📚  Save word") { saveSubtitleWord() })
+            addView(chip("↶  Replay 0.75x") { replayCurrentSubtitle() })
+            addView(chip("🔊  Speak") { speakCurrentSubtitle() })
         }
         val bottomCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1934,10 +1990,14 @@ class MainActivity : Activity() {
         currentSubtitleLine = ""
         p.addListener(object : Player.Listener {
             override fun onCues(cueGroup: CueGroup) {
-                currentSubtitleLine = cueGroup.cues
+                val line = cueGroup.cues
                     .mapNotNull { it.text?.toString()?.trim() }
                     .filter { it.isNotBlank() }
                     .joinToString(" ")
+                if (line.isNotBlank() && line != currentSubtitleLine) {
+                    currentSubtitleLine = line
+                    currentSubtitleStartPosition = p.currentPosition
+                }
             }
 
             override fun onPlaybackStateChanged(state: Int) {
@@ -2011,6 +2071,9 @@ class MainActivity : Activity() {
         previewPlayer?.release()
         previewPlayer = null
         player?.release()
+        speechEngine?.stop()
+        speechEngine?.shutdown()
+        speechEngine = null
         player = null
         currentUri = null
         playerView.player = null

@@ -58,6 +58,9 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.VideoSize
+import androidx.media3.common.text.CueGroup
+import org.json.JSONArray
+import org.json.JSONObject
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
@@ -90,6 +93,7 @@ class MainActivity : Activity() {
 
     private var player: ExoPlayer? = null
     private var currentUri: Uri? = null
+    private var currentSubtitleLine: String = ""
 
     private lateinit var root: FrameLayout
     private lateinit var home: LinearLayout
@@ -598,6 +602,72 @@ class MainActivity : Activity() {
             type = "*/*"
         }
         startActivityForResult(i, REQ_SUB)
+    }
+
+    private fun saveSubtitleWord() {
+        val sentence = currentSubtitleLine.trim()
+        if (sentence.isBlank()) {
+            toast("No subtitle text to save yet")
+            return
+        }
+
+        val wordInput = EditText(this).apply {
+            hint = "Word or phrase"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            setSingleLine(true)
+            setText(sentence)
+        }
+        val meaningInput = EditText(this).apply {
+            hint = "Meaning / translation"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            setSingleLine(true)
+        }
+        val example = TextView(this).apply {
+            text = "Subtitle context: $sentence"
+            textSize = 13f
+            setTextColor(grayText)
+            setPadding(dp(4), dp(10), dp(4), dp(4))
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(wordInput)
+            addView(meaningInput, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(10)
+            })
+            addView(example)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Save from subtitle")
+            .setView(content)
+            .setPositiveButton("Save") { _, _ ->
+                val word = wordInput.text.toString().trim()
+                val meaning = meaningInput.text.toString().trim()
+                if (word.isBlank() || meaning.isBlank()) {
+                    toast("Enter the word and its meaning")
+                    return@setPositiveButton
+                }
+                val vocabularyPrefs = getSharedPreferences("zeko_vocabulary", MODE_PRIVATE)
+                val entries = try {
+                    JSONArray(vocabularyPrefs.getString("entries", "[]"))
+                } catch (_: Exception) {
+                    JSONArray()
+                }
+                entries.put(JSONObject().apply {
+                    put("id", System.currentTimeMillis())
+                    put("word", word)
+                    put("meaning", meaning)
+                    put("example", sentence)
+                    put("savedAt", System.currentTimeMillis())
+                })
+                vocabularyPrefs.edit().putString("entries", entries.toString()).apply()
+                toast("Saved to My Vocabulary")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun loadSubtitle(sub: Uri) {
@@ -1149,6 +1219,7 @@ class MainActivity : Activity() {
             addView(titleTv)
             addView(chip("Audio") { pickTrack(C.TRACK_TYPE_AUDIO, "Audio track") })
             addView(chip("Subs") { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") })
+            addView(chip("Save word") { saveSubtitleWord() })
             addView(speedBtn)
             addView(chip("PiP") { enterPip() })
             addView(ratioBtn)
@@ -1859,7 +1930,15 @@ class MainActivity : Activity() {
 
         val start = if (rememberPos) prefs.getLong("p:" + uri, 0L) else 0L
         p.setMediaItem(MediaItem.fromUri(uri), start)
+        currentSubtitleLine = ""
         p.addListener(object : Player.Listener {
+            override fun onCues(cueGroup: CueGroup) {
+                currentSubtitleLine = cueGroup.cues
+                    .mapNotNull { it.text?.toString()?.trim() }
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ")
+            }
+
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_ENDED) prefs.edit().remove("p:" + uri).apply()
             }

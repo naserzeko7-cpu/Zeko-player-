@@ -1133,7 +1133,7 @@ class MainActivity : Activity() {
         )
 
         settingsList.addView(sectionTitle("ABOUT"))
-        settingsList.addView(settingRow("Zeko Player 1.0", "Made by Zakariya") { })
+        settingsList.addView(settingRow("ZEKO Player 1.1", "Designed for a focused video experience") { })
 
         home.visibility = View.GONE
         settingsPage.visibility = View.VISIBLE
@@ -1184,7 +1184,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
                 setShape(GradientDrawable.OVAL)
-                setColor(if (label == "▶" || label == "Ⅱ") accent else Color.parseColor("#30303A"))
+                setColor(if (label == "▶" || label == "Ⅱ" || label == "❚❚") accent else Color.parseColor("#30303A"))
                 setStroke(dp(1), Color.parseColor("#55FFFFFF"))
             }
             layoutParams = LinearLayout.LayoutParams(dp(size), dp(size)).apply {

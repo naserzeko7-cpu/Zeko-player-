@@ -2449,7 +2449,7 @@ class MainActivity : Activity() {
         liveTranslationEnabled = false
         liveAudioSink?.enabled = false
         try { speechRecognizer?.close() } catch (_: Exception) { }
-        localTranslator?.close()
+        madladTranslator?.close()
         speechExec.shutdownNow()
         super.onDestroy()
         ui.removeCallbacks(ticker)

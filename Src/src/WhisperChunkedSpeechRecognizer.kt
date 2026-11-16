@@ -8,7 +8,6 @@ import kotlinx.coroutines.runBlocking
 import java.io.Closeable
 import java.io.File
 import java.io.FileOutputStream
-import java.io.RandomAccessFile
 
 /**
  * Offline English ASR using whisper.cpp.

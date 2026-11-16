@@ -924,7 +924,7 @@ class MainActivity : Activity() {
             val f = folders[position]
             h.frame.layoutParams.height = thumbHeight(gridCols())
             h.frame.requestLayout()
-            h.title.text = "📁 " + f.name
+            h.title.text = f.name
             h.sub.text = "${f.count} videos"
             h.dur.visibility = View.GONE
             h.progress.visibility = View.GONE
@@ -1527,7 +1527,7 @@ class MainActivity : Activity() {
     private fun lockScreen() {
         locked = true
         hideControls()
-        showHud("🔒  Locked")
+        showHud("Locked")
     }
 
     private fun unlockScreen() {
@@ -1624,7 +1624,7 @@ class MainActivity : Activity() {
         val lp = window.attributes
         lp.screenBrightness = brightness
         window.attributes = lp
-        showHud("☀  ${(brightness * 100).roundToInt()}%")
+        showHud("Brightness  ${(brightness * 100).roundToInt()}%")
     }
 
     private fun adjustVolume(delta: Float) {
@@ -1632,7 +1632,7 @@ class MainActivity : Activity() {
         val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         volLevel = (volLevel + delta * 1.3f).coerceIn(0f, 1f)
         am.setStreamVolume(AudioManager.STREAM_MUSIC, (volLevel * max).roundToInt(), 0)
-        showHud("🔊  ${(volLevel * 100).roundToInt()}%")
+        showHud("Volume  ${(volLevel * 100).roundToInt()}%")
     }
 
     private fun showHud(t: String) {

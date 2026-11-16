@@ -109,12 +109,15 @@ class MainActivity : Activity() {
     private var speechReady = false
 
     @Volatile private var liveTranslationEnabled = false
+    @Volatile private var liveTranslationRequest = 0L
     private var liveAudioSink: VoskPcmTeeSink? = null
     private var speechRecognizer: LocalSpeechRecognizer? = null
     private var localTranslator: LocalArabicTranslator? = null
     private var speechModelReady = false
     private var translationModelReady = false
     private var liveTranslationOverlay: TextView? = null
+    private var lastLiveSpeechText = ""
+    private var lastLiveTranslationAt = 0L
     private val speechExec = Executors.newSingleThreadExecutor()
 
     private lateinit var root: FrameLayout
@@ -2026,19 +2029,26 @@ class MainActivity : Activity() {
             if (liveTranslationEnabled) {
                 speechExec.execute {
                     try {
-                        val spoken = speechRecognizer?.acceptAudioFinal(pcm)
-                        if (!spoken.isNullOrBlank()) {
+                        // Translate incremental Vosk hypotheses instead of waiting for a full sentence.
+                        val spoken = speechRecognizer?.acceptAudio(pcm)?.trim().orEmpty()
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        val isNewText = spoken.length >= 4 && spoken != lastLiveSpeechText
+                        val shouldTranslate = isNewText &&
+                            (spoken.length >= 18 || now - lastLiveTranslationAt >= 650L)
+                        if (shouldTranslate && liveTranslationEnabled) {
+                            lastLiveSpeechText = spoken
+                            lastLiveTranslationAt = now
+                            val requestId = ++liveTranslationRequest
                             localTranslator?.takeIf { it.isReady() }?.translate(spoken)
                                 ?.addOnSuccessListener { arabic ->
                                     runOnUiThread {
-                                        if (liveTranslationEnabled) {
+                                        if (liveTranslationEnabled && requestId == liveTranslationRequest &&
+                                            !arabic.isNullOrBlank()
+                                        ) {
                                             liveTranslationOverlay?.text = arabic
                                             liveTranslationOverlay?.visibility = View.VISIBLE
                                         }
                                     }
-                                }
-                                ?.addOnFailureListener {
-                                    runOnUiThread { toast("تعذرت ترجمة هذا المقطع") }
                                 }
                         }
                     } catch (error: Exception) {
@@ -2156,6 +2166,7 @@ class MainActivity : Activity() {
     private fun toggleLiveTranslation() {
         if (liveTranslationEnabled) {
             liveTranslationEnabled = false
+            liveTranslationRequest++
             liveAudioSink?.enabled = false
             liveTranslationOverlay?.visibility = View.GONE
             toast("تم إيقاف الترجمة الفورية")
@@ -2257,6 +2268,9 @@ class MainActivity : Activity() {
             return
         }
         liveTranslationEnabled = true
+        lastLiveSpeechText = ""
+        lastLiveTranslationAt = 0L
+        liveTranslationRequest++
         sink.enabled = true
         liveTranslationOverlay?.text = "أستمع إلى الكلام الإنجليزي..."
         liveTranslationOverlay?.visibility = View.VISIBLE

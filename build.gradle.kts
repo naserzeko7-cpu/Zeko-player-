@@ -37,6 +37,5 @@ android {
 dependencies {
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
-    implementation("com.google.mlkit:translate:17.0.3")
     implementation(files("libs/sherpa-onnx-1.13.8.aar"))
 }

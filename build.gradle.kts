@@ -11,10 +11,19 @@ android {
         applicationId = "com.zeko.player"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
         ndk {
             abiFilters.add("arm64-v8a")
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            // Signed so Android can install it like a regular APK.
+            // CI uses the standard Android debug keystore for this public test build.
+            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = false
         }
     }
 

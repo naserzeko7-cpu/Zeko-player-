@@ -33,6 +33,13 @@ class LocalSpeechRecognizer(
     }
 
     @Synchronized
+    fun acceptAudioFinal(pcm16: ByteArray, length: Int = pcm16.size): String? {
+        check(!closed) { "Speech recognizer is closed" }
+        require(length in 1..pcm16.size) { "Invalid audio length" }
+        return if (recognizer.acceptWaveForm(pcm16, length)) parseText(recognizer.result) else null
+    }
+
+    @Synchronized
     fun finish(): String {
         if (closed) return ""
         return parseText(recognizer.finalResult)

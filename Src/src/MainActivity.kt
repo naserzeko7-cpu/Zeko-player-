@@ -2050,6 +2050,13 @@ class MainActivity : Activity() {
                                         }
                                     }
                                 }
+                                ?.addOnFailureListener { error ->
+                                    runOnUiThread {
+                                        if (liveTranslationEnabled && requestId == liveTranslationRequest) {
+                                            toast("فشلت الترجمة: " + (error.localizedMessage ?: "خطأ اتصال"))
+                                        }
+                                    }
+                                }
                         }
                     } catch (error: Exception) {
                         runOnUiThread { toast("تعذر التعرف على الكلام: " + (error.localizedMessage ?: "خطأ")) }

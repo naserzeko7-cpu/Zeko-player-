@@ -528,6 +528,9 @@ class MainActivity : Activity() {
             addView(tabVideos)
             addView(tabFolders)
             addView(navItem("➕", "Open") { openMenu() })
+            addView(navItem("📚", "Words") {
+                startActivity(Intent(this@MainActivity, VocabularyActivity::class.java))
+            })
             addView(navItem("⚙", "Settings") { openSettings() })
         }
 

@@ -33,5 +33,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ZekoPlayer-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: build/outputs/apk/debug/*.apk
           if-no-files-found: error

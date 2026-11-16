@@ -110,8 +110,8 @@ class MainActivity : Activity() {
 
     @Volatile private var liveTranslationEnabled = false
     @Volatile private var liveTranslationRequest = 0L
-    private var liveAudioSink: VoskPcmTeeSink? = null
-    private var speechRecognizer: LocalSpeechRecognizer? = null
+    private var liveAudioSink: Pcm16kTeeSink? = null
+    private var speechRecognizer: SherpaOnlineSpeechRecognizer? = null
     private var localTranslator: LocalArabicTranslator? = null
     private var speechModelReady = false
     private var translationModelReady = false
@@ -1438,25 +1438,24 @@ class MainActivity : Activity() {
             }
         )
         liveTranslationOverlay = TextView(this).apply {
-            textSize = 21f
+            textSize = 18f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             textDirection = View.TEXT_DIRECTION_RTL
-            setPadding(dp(18), dp(12), dp(18), dp(12))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
             background = GradientDrawable().apply {
-                cornerRadius = dp(12).toFloat()
-                setColor(Color.parseColor("#D9000000"))
-                setStroke(dp(1), accent)
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.parseColor("#99000000"))
             }
             visibility = View.GONE
-            maxLines = 4
+            maxLines = 2
         }
         root.addView(
             liveTranslationOverlay,
             FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
                 leftMargin = dp(24)
                 rightMargin = dp(24)
-                bottomMargin = dp(126)
+                bottomMargin = dp(28)
             }
         )
         setupSeekPreview()
@@ -2025,16 +2024,17 @@ class MainActivity : Activity() {
         currentUri = uri
 
         liveAudioSink?.enabled = false
-        val pcmSink = VoskPcmTeeSink { pcm ->
+        val pcmSink = Pcm16kTeeSink { pcm ->
             if (liveTranslationEnabled) {
                 speechExec.execute {
                     try {
-                        // Translate incremental Vosk hypotheses instead of waiting for a full sentence.
-                        val spoken = speechRecognizer?.acceptAudio(pcm)?.trim().orEmpty()
+                        // Use Sherpa streaming hypotheses, translating at a controlled cadence or at phrase end.
+                        val update = speechRecognizer?.acceptAudio(pcm)
+                        val spoken = update?.text?.trim().orEmpty()
                         val now = android.os.SystemClock.elapsedRealtime()
                         val isNewText = spoken.length >= 4 && spoken != lastLiveSpeechText
                         val shouldTranslate = isNewText &&
-                            (spoken.length >= 18 || now - lastLiveTranslationAt >= 650L)
+                            (update?.isEndpoint == true || now - lastLiveTranslationAt >= 1100L)
                         if (shouldTranslate && liveTranslationEnabled) {
                             lastLiveSpeechText = spoken
                             lastLiveTranslationAt = now
@@ -2179,7 +2179,7 @@ class MainActivity : Activity() {
             return
         }
 
-        val installer = VoskModelInstaller(this)
+        val installer = SherpaModelInstaller(this)
         if (installer.isInstalled()) {
             prepareLiveModels(installer.modelDirectory())
             return
@@ -2187,7 +2187,7 @@ class MainActivity : Activity() {
 
         AlertDialog.Builder(this)
             .setTitle("إعداد الترجمة الفورية")
-            .setMessage("سيتم تنزيل نموذج إنجليزي حجمه نحو 40MB. بعد التنزيل يعمل التعرف والترجمة محلياً.")
+            .setMessage("سيتم تنزيل نموذج تعرّف إنجليزي حجمه نحو 73MB. بعد التنزيل يعمل التعرّف والترجمة محلياً على الجهاز.")
             .setPositiveButton("تنزيل وبدء") { _, _ ->
                 val loading = AlertDialog.Builder(this)
                     .setTitle("تنزيل نموذج الصوت")
@@ -2220,7 +2220,7 @@ class MainActivity : Activity() {
         toast("جاري تجهيز التعرف الصوتي والترجمة...")
         speechExec.execute {
             try {
-                val recognizer = LocalSpeechRecognizer(modelDirectory.absolutePath)
+                val recognizer = SherpaOnlineSpeechRecognizer(modelDirectory)
                 runOnUiThread {
                     if (isFinishing || isDestroyed) {
                         recognizer.close()

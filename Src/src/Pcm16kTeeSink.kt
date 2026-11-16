@@ -17,7 +17,7 @@ class Pcm16kTeeSink(
     private var resamplePhase = 0
     private var resampleSum = 0L
     private var resampleCount = 0
-    private val pending = ByteArrayOutputStream(8000)
+    private val pending = ByteArrayOutputStream(192000)
 
     @Synchronized
     override fun flush(sampleRateHz: Int, channelCount: Int, encoding: Int) {
@@ -55,8 +55,8 @@ class Pcm16kTeeSink(
                 resampleCount = 0
             }
         }
-        // 8 KB is approximately 250 ms of mono PCM16 at 16 kHz.
-        if (pending.size() >= 8000) {
+        // Six seconds of mono PCM16 gives the file-based Whisper API enough context.
+        if (pending.size() >= 192000) {
             val chunk = pending.toByteArray()
             pending.reset()
             onPcmChunk(chunk)

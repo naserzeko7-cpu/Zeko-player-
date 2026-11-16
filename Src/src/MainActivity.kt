@@ -213,6 +213,7 @@ class MainActivity : Activity() {
     private var volLevel = 0f
     private var ratioIdx = 0
     private var speed = 1f
+    private var endDialogShown = false
 
     // ---------- Settings (saved on the device) ----------
     private val prefs by lazy { getSharedPreferences("zeko", MODE_PRIVATE) }
@@ -376,7 +377,7 @@ class MainActivity : Activity() {
         val ff = folderFilter
         sectionLabel.text = when {
             tab == 1 -> "Folders  •  ${folders.size}"
-            ff != null -> "📁 $ff  •  ${shown.size}     ✕"
+            ff != null -> "$ff  •  ${shown.size}     ✕"
             else -> "All videos  •  ${shown.size}"
         }
         layoutBtn.text = if (listMode) "▦" else "☰"
@@ -453,7 +454,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(20), dp(22), dp(10), dp(8))
             addView(titles)
-            addView(iconBtn("🔍") { toggleSearch() })
+            addView(iconBtn("Search") { toggleSearch() })
             addView(layoutBtn)
         }
 
@@ -1357,12 +1358,12 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(4), 0, 0)
-            addView(chip("🔒  Lock") { lockScreen() })
-            addView(chip("🔄  Rotate") { cycleOrientation(); scheduleHide() })
-            addView(chip("📚  Save word") { saveSubtitleWord() })
-            addView(chip("↶  Replay 0.75x") { replayCurrentSubtitle() })
-            addView(chip("🔊  Speak") { speakCurrentSubtitle() })
-            addView(chip("🌐  Live AR") { toggleLiveTranslation() })
+            addView(chip("Lock") { lockScreen() })
+            addView(chip("Rotate") { cycleOrientation(); scheduleHide() })
+            addView(chip("Save word") { saveSubtitleWord() })
+            addView(chip("Replay line") { replayCurrentSubtitle() })
+            addView(chip("Speak") { speakCurrentSubtitle() })
+            addView(chip("Next video") { playNextVideo() })
         }
         val actionScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -2019,6 +2020,7 @@ class MainActivity : Activity() {
     }
 
     private fun play(uri: Uri, title: String? = null) {
+        endDialogShown = false
         savePosition()
         player?.release()
         currentUri = uri
@@ -2103,7 +2105,13 @@ class MainActivity : Activity() {
             }
 
             override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_ENDED) prefs.edit().remove("p:" + uri).apply()
+                if (state == Player.STATE_ENDED) {
+                    prefs.edit().remove("p:" + uri).apply()
+                    if (!endDialogShown) {
+                        endDialogShown = true
+                        showEndOfVideoDialog()
+                    }
+                }
             }
         })
         p.setAudioAttributes(
@@ -2167,6 +2175,33 @@ class MainActivity : Activity() {
         }
     }
 
+
+    private fun playNextVideo() {
+        val current = currentUri ?: return
+        val playlist = if (shown.isNotEmpty()) shown else videos
+        val index = playlist.indexOfFirst { it.uri == current }
+        val next = playlist.getOrNull(index + 1)
+        if (next == null) {
+            toast("No next video")
+            return
+        }
+        play(next.uri, next.name)
+    }
+
+    private fun showEndOfVideoDialog() {
+        if (isFinishing || isDestroyed) return
+        AlertDialog.Builder(this)
+            .setTitle("Video finished")
+            .setMessage("What would you like to do?")
+            .setPositiveButton("Replay current video") { _, _ ->
+                player?.seekTo(0L)
+                player?.play()
+                showControls()
+            }
+            .setNegativeButton("Play next video") { _, _ -> playNextVideo() }
+            .setNeutralButton("Close", null)
+            .show()
+    }
 
     private fun requestMadladEndpoint() {
         val input = EditText(this).apply {

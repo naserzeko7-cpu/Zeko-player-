@@ -1233,15 +1233,15 @@ class MainActivity : Activity() {
     // ---------- Player screen ----------
     private fun chip(label: String, onClick: () -> Unit): TextView = TextView(this).apply {
         text = label
-        textSize = 14f
-        setTextColor(Color.WHITE)
-        typeface = Typeface.DEFAULT_BOLD
+        textSize = 12f
+        setTextColor(Color.parseColor("#F3F1F7"))
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         gravity = Gravity.CENTER
-        setPadding(dp(14), dp(7), dp(14), dp(7))
+        setPadding(dp(16), dp(9), dp(16), dp(9))
         val shape = GradientDrawable().apply {
-            cornerRadius = dp(18).toFloat()
-            setColor(Color.parseColor("#20232D"))
-            setStroke(dp(1), Color.parseColor("#3DFF6D00"))
+            cornerRadius = dp(14).toFloat()
+            setColor(Color.parseColor("#D91C1D27"))
+            setStroke(dp(1), Color.parseColor("#454550"))
         }
         background = RippleDrawable(
             ColorStateList.valueOf(Color.parseColor("#44FFFFFF")),
@@ -1249,8 +1249,10 @@ class MainActivity : Activity() {
             null
         )
         minHeight = dp(42)
-        elevation = dp(1).toFloat()
-        layoutParams = LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) }
+        layoutParams = LinearLayout.LayoutParams(-2, dp(42)).apply {
+            leftMargin = dp(5)
+            rightMargin = dp(5)
+        }
         setOnClickListener { onClick() }
     }
 
@@ -1269,12 +1271,14 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
                 setShape(GradientDrawable.OVAL)
-                setColor(if (label == "▶" || label == "Ⅱ" || label == "❚❚") accent else Color.parseColor("#30303A"))
-                setStroke(dp(1), Color.parseColor("#55FFFFFF"))
+                setColor(if (label == "▶" || label == "Ⅱ" || label == "❚❚") accent else Color.parseColor("#E6242530"))
+                setStroke(dp(1), if (label == "▶" || label == "Ⅱ" || label == "❚❚")
+                    Color.parseColor("#FFFFB27C") else Color.parseColor("#555B5B68"))
             }
+            elevation = if (label == "▶" || label == "Ⅱ" || label == "❚❚") dp(8).toFloat() else dp(2).toFloat()
             layoutParams = LinearLayout.LayoutParams(dp(size), dp(size)).apply {
-                leftMargin = dp(8)
-                rightMargin = dp(8)
+                leftMargin = dp(7)
+                rightMargin = dp(7)
             }
             when (label) {
                 "❚❚" -> setPlayerGlyph(this, R.drawable.ic_pause)
@@ -1383,35 +1387,54 @@ class MainActivity : Activity() {
             visibility = View.GONE
         }
 
-        // ----- top row: back, title, tools -----
+        // ----- compact title bar + horizontally scrollable tool dock -----
         titleTv = TextView(this).apply {
-            textSize = 18f
+            textSize = 17f
             setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             setSingleLine(true)
             ellipsize = TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
         }
-        speedBtn = chip("1x") { chooseSpeed(); scheduleHide() }
-        ratioBtn = chip("Fit") { cycleRatio(); scheduleHide() }
-        val topRow = LinearLayout(this).apply {
+        speedBtn = chip("1.0×") { chooseSpeed(); scheduleHide() }
+        ratioBtn = chip("FIT") { cycleRatio(); scheduleHide() }
+        val titleLine = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(16), dp(16), dp(8))
             addView(TextView(this@MainActivity).apply {
-                text = "←"
-                textSize = 28f
+                text = "‹"
+                textSize = 34f
                 setTextColor(Color.WHITE)
-                setPadding(dp(10), dp(2), dp(16), dp(2))
+                gravity = Gravity.CENTER
+                setPadding(dp(8), 0, dp(16), dp(3))
                 setOnClickListener { stopAndGoHome() }
-            })
+            }, LinearLayout.LayoutParams(dp(42), dp(48)))
             addView(titleTv)
-            addView(chip("Audio") { pickTrack(C.TRACK_TYPE_AUDIO, "Audio track") })
-            addView(chip("Subs") { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") })
-
+            addView(chip("PIP") { enterPip() })
+        }
+        val toolRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(chip("AUDIO") { pickTrack(C.TRACK_TYPE_AUDIO, "Audio track") })
+            addView(chip("SUBTITLES") { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") })
             addView(speedBtn)
-            addView(chip("PiP") { enterPip() })
             addView(ratioBtn)
+        }
+        val toolScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(toolRow)
+        }
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(9))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(20).toFloat()
+                setColor(Color.parseColor("#D9101017"))
+                setStroke(dp(1), Color.parseColor("#383841"))
+            }
+            addView(titleLine)
+            addView(toolScroll)
         }
 
         // ----- center: rewind / play / forward -----
@@ -1419,11 +1442,19 @@ class MainActivity : Activity() {
         val centerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            addView(circleBtn("‹", 48, 18f) { playPreviousVideo(); scheduleHide() })
-            addView(circleBtn("−10s", 54, 14f) { seekBy(-1); scheduleHide() })
-            addView(playBtn)
-            addView(circleBtn("+10s", 54, 14f) { seekBy(1); scheduleHide() })
-            addView(circleBtn("›", 48, 18f) { playNextVideo(); scheduleHide() })
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(28).toFloat()
+                setColor(Color.parseColor("#A612121A"))
+                setStroke(dp(1), Color.parseColor("#333D3D48"))
+            }
+            addView(circleBtn("‹", 44, 18f) { playPreviousVideo(); scheduleHide() })
+            addView(circleBtn("−10s", 48, 13f) { seekBy(-1); scheduleHide() })
+            addView(playBtn.apply { layoutParams = LinearLayout.LayoutParams(dp(72), dp(72)).apply {
+                leftMargin = dp(9); rightMargin = dp(9)
+            } })
+            addView(circleBtn("+10s", 48, 13f) { seekBy(1); scheduleHide() })
+            addView(circleBtn("›", 44, 18f) { playNextVideo(); scheduleHide() })
         }
 
         // ----- bottom: time bar + actions -----
@@ -1485,7 +1516,12 @@ class MainActivity : Activity() {
         }
         val bottomCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), 0, dp(24), dp(18))
+            setPadding(dp(18), dp(13), dp(18), dp(15))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(20).toFloat()
+                setColor(Color.parseColor("#D9101017"))
+                setStroke(dp(1), Color.parseColor("#383841"))
+            }
             addView(timeRow)
             addView(actionScroll)
         }
@@ -1506,9 +1542,13 @@ class MainActivity : Activity() {
             visibility = View.GONE
             addView(scrimTop, FrameLayout.LayoutParams(-1, dp(130), Gravity.TOP))
             addView(scrimBottom, FrameLayout.LayoutParams(-1, dp(200), Gravity.BOTTOM))
-            addView(topRow, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+            addView(topRow, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply {
+                leftMargin = dp(14); topMargin = dp(12); rightMargin = dp(14)
+            })
             addView(centerRow, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
-            addView(bottomCol, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+            addView(bottomCol, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
+                leftMargin = dp(14); rightMargin = dp(14); bottomMargin = dp(12)
+            })
         }
 
         lockOverlay = TextView(this).apply {

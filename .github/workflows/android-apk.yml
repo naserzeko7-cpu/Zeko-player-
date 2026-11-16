@@ -1,4 +1,4 @@
-name: Android APK Build
+name: ZEKO Player Release APK
 
 on:
   push:
@@ -26,12 +26,17 @@ jobs:
         with:
           gradle-version: "8.7"
 
-      - name: Build debug APK
-        run: gradle assembleDebug
+      - name: Build signed release APK
+        run: gradle assembleRelease --no-daemon
 
-      - name: Upload APK
+      - name: Prepare clean APK filename
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/ZEKO-Player.apk
+
+      - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZekoPlayer-debug-apk
-          path: build/outputs/apk/debug/*.apk
+          name: ZEKO-Player
+          path: dist/ZEKO-Player.apk
           if-no-files-found: error

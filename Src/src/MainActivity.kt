@@ -413,13 +413,15 @@ class MainActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
-    private fun navItem(icon: String, label: String, onClick: () -> Unit): TextView =
+    private fun navItem(label: String, onClick: () -> Unit): TextView =
         TextView(this).apply {
-            text = "$icon\n$label"
+            text = label
             textSize = 12f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(grayText)
             gravity = Gravity.CENTER
-            setPadding(0, dp(8), 0, dp(8))
+            setPadding(0, dp(16), 0, dp(16))
+            minHeight = dp(52)
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
             setOnClickListener { onClick() }
         }
@@ -432,7 +434,7 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
         }
         titles.addView(TextView(this).apply {
-            text = "Zeko Player"
+            text = "ZEKO PLAYER"
             textSize = 28f
             setTextColor(Color.WHITE)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
@@ -551,18 +553,18 @@ class MainActivity : Activity() {
         body.addView(foldersGrid, FrameLayout.LayoutParams(-1, -1))
         body.addView(emptyBox, FrameLayout.LayoutParams(-1, -1))
 
-        tabVideos = navItem("🎬", "Videos") { selectTab(0) }
-        tabFolders = navItem("📁", "Folders") { selectTab(1) }
+        tabVideos = navItem("Videos") { selectTab(0) }
+        tabFolders = navItem("Folders") { selectTab(1) }
         val bottomNav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(navBg)
             addView(tabVideos)
             addView(tabFolders)
-            addView(navItem("➕", "Open") { openMenu() })
-            addView(navItem("📚", "Words") {
+            addView(navItem("Open") { openMenu() })
+            addView(navItem("Words") {
                 startActivity(Intent(this@MainActivity, VocabularyActivity::class.java))
             })
-            addView(navItem("⚙", "Settings") { openSettings() })
+            addView(navItem("Settings") { openSettings() })
         }
 
         home.addView(header)

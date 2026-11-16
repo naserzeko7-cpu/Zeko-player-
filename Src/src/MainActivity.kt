@@ -1842,8 +1842,11 @@ class MainActivity : Activity() {
     // ----- speed / ratio / tracks -----
     private fun chooseSpeed() {
         val p = player ?: return
-        val values = floatArrayOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
-        val labels = arrayOf("0.5x", "0.75x", "1x (normal)", "1.25x", "1.5x", "2x")
+        val values = floatArrayOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
+        val labels = arrayOf(
+            "0.25x", "0.5x", "0.75x", "1x (normal)", "1.25x",
+            "1.5x", "1.75x", "2x", "2.5x", "3x"
+        )
         AlertDialog.Builder(this)
             .setTitle("Playback speed")
             .setSingleChoiceItems(labels, values.indexOfFirst { it == speed }.coerceAtLeast(0)) { d, w ->

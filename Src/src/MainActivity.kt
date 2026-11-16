@@ -112,7 +112,7 @@ class MainActivity : Activity() {
     @Volatile private var liveTranslationRequest = 0L
     private var liveAudioSink: Pcm16kTeeSink? = null
     private var speechRecognizer: SherpaOnlineSpeechRecognizer? = null
-    private var localTranslator: LocalArabicTranslator? = null
+    private var madladTranslator: MadladArabicTranslator? = null
     private var speechModelReady = false
     private var translationModelReady = false
     private var liveTranslationOverlay: TextView? = null
@@ -2039,7 +2039,7 @@ class MainActivity : Activity() {
                             lastLiveSpeechText = spoken
                             lastLiveTranslationAt = now
                             val requestId = ++liveTranslationRequest
-                            localTranslator?.takeIf { it.isReady() }?.translate(spoken)
+                            madladTranslator?.takeIf { it.isReady() }?.translate(spoken)
                                 ?.addOnSuccessListener { arabic ->
                                     runOnUiThread {
                                         if (liveTranslationEnabled && requestId == liveTranslationRequest &&
@@ -2162,6 +2162,32 @@ class MainActivity : Activity() {
     }
 
 
+    private fun requestMadladEndpoint() {
+        val input = EditText(this).apply {
+            hint = "http://192.168.1.20:8000"
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setText(prefs.getString("madladEndpoint", "").orEmpty())
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("عنوان خادم MADLAD")
+            .setMessage("أدخل عنوان الخادم الذي يشغّل نموذج MADLAD-400. يجب أن يكون التابلت والخادم على شبكة خاصة موثوقة، أو استخدم عنوان HTTPS آمن.")
+            .setView(input)
+            .setPositiveButton("حفظ واتصال") { _, _ ->
+                val endpoint = input.text.toString().trim().trimEnd('/')
+                if (!endpoint.startsWith("https://") && !endpoint.startsWith("http://")) {
+                    toast("أدخل عنواناً يبدأ بـ http:// أو https://")
+                    return@setPositiveButton
+                }
+                prefs.edit().putString("madladEndpoint", endpoint).apply()
+                toggleLiveTranslation()
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
     // ---------- Live English speech -> Arabic subtitles ----------
     private fun toggleLiveTranslation() {
         if (liveTranslationEnabled) {
@@ -2172,8 +2198,12 @@ class MainActivity : Activity() {
             toast("تم إيقاف الترجمة الفورية")
             return
         }
+        if (prefs.getString("madladEndpoint", "").isNullOrBlank()) {
+            requestMadladEndpoint()
+            return
+        }
         if (speechModelReady && translationModelReady && speechRecognizer != null &&
-            localTranslator?.isReady() == true
+            madladTranslator?.isReady() == true
         ) {
             enableLiveTranslation()
             return
@@ -2229,26 +2259,25 @@ class MainActivity : Activity() {
                     try { speechRecognizer?.close() } catch (_: Exception) { }
                     speechRecognizer = recognizer
                     speechModelReady = true
-                    if (localTranslator == null) {
-                        val translator = LocalArabicTranslator(
-                            onReady = {
-                                runOnUiThread {
-                                    translationModelReady = true
-                                    if (speechModelReady) enableLiveTranslation()
-                                }
-                            },
-                            onError = { error ->
-                                runOnUiThread { toast("تعذر تجهيز الترجمة: " + error) }
+                    val endpoint = prefs.getString("madladEndpoint", "").orEmpty()
+                    madladTranslator?.close()
+                    val translator = MadladArabicTranslator(
+                        endpoint = endpoint,
+                        onReady = {
+                            runOnUiThread {
+                                translationModelReady = true
+                                if (speechModelReady) enableLiveTranslation()
                             }
-                        )
-                        localTranslator = translator
-                        translator.prepare()
-                    } else if (localTranslator?.isReady() == true) {
-                        translationModelReady = true
-                        enableLiveTranslation()
-                    } else {
-                        localTranslator?.prepare()
-                    }
+                        },
+                        onError = { error ->
+                            runOnUiThread {
+                                translationModelReady = false
+                                toast("تعذر الاتصال بمترجم MADLAD: " + error)
+                            }
+                        }
+                    )
+                    madladTranslator = translator
+                    translator.prepare()
                 }
             } catch (error: Exception) {
                 runOnUiThread {
@@ -2260,7 +2289,7 @@ class MainActivity : Activity() {
 
     private fun enableLiveTranslation() {
         if (!speechModelReady || !translationModelReady ||
-            speechRecognizer == null || localTranslator?.isReady() != true
+            speechRecognizer == null || madladTranslator?.isReady() != true
         ) return
         val sink = liveAudioSink
         if (sink == null) {
@@ -2300,8 +2329,8 @@ class MainActivity : Activity() {
         }
         speechModelReady = false
         translationModelReady = false
-        localTranslator?.close()
-        localTranslator = null
+        madladTranslator?.close()
+        madladTranslator = null
         ui.removeCallbacks(ticker)
         ui.removeCallbacks(hideRunnable)
         stopBgService()

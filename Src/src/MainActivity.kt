@@ -1283,6 +1283,32 @@ class MainActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
+    private fun iconChip(label: String, iconRes: Int, onClick: () -> Unit): TextView = TextView(this).apply {
+        text = label
+        textSize = 11f
+        setTextColor(Color.parseColor("#F3F1F7"))
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        gravity = Gravity.CENTER
+        setPadding(dp(13), dp(8), dp(13), dp(8))
+        val icon = getDrawable(iconRes)?.mutate()
+        icon?.setTint(Color.parseColor("#FFB27C"))
+        setCompoundDrawablesWithIntrinsicBounds(icon, null, null, null)
+        compoundDrawablePadding = dp(7)
+        val shape = GradientDrawable().apply {
+            cornerRadius = dp(14).toFloat()
+            setColor(Color.parseColor("#D91C1D27"))
+            setStroke(dp(1), Color.parseColor("#454550"))
+        }
+        background = RippleDrawable(ColorStateList.valueOf(Color.parseColor("#44FFFFFF")), shape, null)
+        minHeight = dp(44)
+        layoutParams = LinearLayout.LayoutParams(-2, dp(44)).apply {
+            leftMargin = dp(5)
+            rightMargin = dp(5)
+        }
+        contentDescription = label
+        setOnClickListener { onClick() }
+    }
+
     private fun setPlayerGlyph(view: TextView, resource: Int) {
         val icon = getDrawable(resource)?.mutate()
         icon?.setTint(Color.WHITE)
@@ -1424,8 +1450,8 @@ class MainActivity : Activity() {
             ellipsize = TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
         }
-        speedBtn = chip("1.0×") { chooseSpeed(); scheduleHide() }
-        ratioBtn = chip("FIT") { cycleRatio(); scheduleHide() }
+        speedBtn = iconChip("1.0×", R.drawable.ic_speed) { chooseSpeed(); scheduleHide() }
+        ratioBtn = iconChip("FIT", R.drawable.ic_fit) { cycleRatio(); scheduleHide() }
         val titleLine = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -1438,13 +1464,13 @@ class MainActivity : Activity() {
                 setOnClickListener { stopAndGoHome() }
             }, LinearLayout.LayoutParams(dp(42), dp(48)))
             addView(titleTv)
-            addView(chip("PIP") { enterPip() })
+            addView(iconChip("PIP", R.drawable.ic_pip) { enterPip() })
         }
         val toolRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(chip("AUDIO") { pickTrack(C.TRACK_TYPE_AUDIO, "Audio track") })
-            addView(chip("SUBTITLES") { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") })
+            addView(iconChip("AUDIO", R.drawable.ic_audio) { pickTrack(C.TRACK_TYPE_AUDIO, "Audio track") })
+            addView(iconChip("SUBTITLES", R.drawable.ic_subtitles) { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") })
             addView(speedBtn)
             addView(ratioBtn)
         }

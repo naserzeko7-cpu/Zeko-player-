@@ -1219,7 +1219,7 @@ class MainActivity : Activity() {
             addView(titleTv)
             addView(chip("Audio") { pickTrack(C.TRACK_TYPE_AUDIO, "Audio track") })
             addView(chip("Subs") { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") })
-            addView(chip("Save word") { saveSubtitleWord() })
+
             addView(speedBtn)
             addView(chip("PiP") { enterPip() })
             addView(ratioBtn)
@@ -1284,6 +1284,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(4), 0, 0)
             addView(chip("🔒  Lock") { lockScreen() })
             addView(chip("🔄  Rotate") { cycleOrientation(); scheduleHide() })
+            addView(chip("📚  Save word") { saveSubtitleWord() })
         }
         val bottomCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

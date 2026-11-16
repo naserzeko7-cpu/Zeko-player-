@@ -53,7 +53,7 @@ class VoskPcmTeeSink(
         }
 
         // Deliver approximately one second at a time; callback must enqueue work quickly.
-        if (pending.size() >= 32000) {
+        if (pending.size() >= 8000) {
             val chunk = pending.toByteArray()
             pending.reset()
             onPcmChunk(chunk)

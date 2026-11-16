@@ -427,54 +427,120 @@ class MainActivity : Activity() {
         }
 
     private fun buildHome() {
-        home = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-
-        val titles = LinearLayout(this).apply {
+        home = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            setPadding(dp(0), dp(0), dp(0), dp(0))
+            setBackgroundColor(bg)
         }
-        titles.addView(TextView(this).apply {
-            text = "ZEKO PLAYER"
-            textSize = 28f
+
+        fun label(value: String, size: Float, color: Int, bold: Boolean = false): TextView =
+            TextView(this).apply {
+                text = value
+                textSize = size
+                setTextColor(color)
+                if (bold) typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            }
+
+        fun surface(color: Int, radius: Int, stroke: Int = Color.TRANSPARENT): GradientDrawable =
+            GradientDrawable().apply {
+                setColor(color)
+                cornerRadius = dp(radius).toFloat()
+                if (stroke != Color.TRANSPARENT) setStroke(dp(1), stroke)
+            }
+
+        // Branded header
+        val brandMark = TextView(this).apply {
+            text = "Z"
+            textSize = 25f
+            typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+            gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-        })
-        titles.addView(TextView(this).apply {
-            text = "By Zakariya"
-            textSize = 13f
-            setTextColor(accent)
-        })
-
-        layoutBtn = iconBtn("☰") {
-            listMode = !listMode
-            grid.numColumns = columns()
-            grid.adapter = adapter
-            updateEmpty()
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.parseColor("#FF8A32"), accent, Color.parseColor("#D84315"))
+            ).apply { cornerRadius = dp(17).toFloat() }
+            layoutParams = LinearLayout.LayoutParams(dp(52), dp(52))
         }
-
+        val brandText = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(label("ZEKO PLAYER", 20f, Color.WHITE, true))
+            addView(label("YOUR PERSONAL MEDIA SPACE", 9f, grayText, true))
+        }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(20), dp(22), dp(10), dp(8))
-            addView(titles)
-            addView(iconBtn("Search") { toggleSearch() })
+            setPadding(dp(20), dp(20), dp(16), dp(14))
+            addView(brandMark)
+            addView(brandText, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                leftMargin = dp(13)
+            })
+            addView(iconBtn("⌕") { toggleSearch() }.apply {
+                textSize = 28f
+                background = surface(cardBg, 15)
+                layoutParams = LinearLayout.LayoutParams(dp(46), dp(46)).apply {
+                    leftMargin = dp(6)
+                }
+            })
+            layoutBtn = iconBtn(if (listMode) "▦" else "☷") {
+                listMode = !listMode
+                grid.numColumns = columns()
+                grid.adapter = adapter
+                updateEmpty()
+            }.apply {
+                textSize = 20f
+                background = surface(cardBg, 15)
+                layoutParams = LinearLayout.LayoutParams(dp(46), dp(46)).apply {
+                    leftMargin = dp(8)
+                }
+            }
             addView(layoutBtn)
         }
 
-        searchBar = EditText(this).apply {
-            hint = "Search videos"
-            setSingleLine(true)
-            textSize = 16f
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
-            setPadding(dp(18), 0, dp(18), 0)
-            background = GradientDrawable().apply {
-                cornerRadius = dp(24).toFloat()
-                setColor(Color.parseColor("#1C1C24"))
+        // Feature panel: gives the library a clear visual hierarchy.
+        val hero = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(20), dp(17), dp(18), dp(17))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BL_TR,
+                intArrayOf(Color.parseColor("#342016"), Color.parseColor("#20202A"), Color.parseColor("#191923"))
+            ).apply {
+                cornerRadius = dp(22).toFloat()
+                setStroke(dp(1), Color.parseColor("#4A3A31"))
             }
+            layoutParams = LinearLayout.LayoutParams(-1, dp(126)).apply {
+                setMargins(dp(18), dp(2), dp(18), dp(16))
+            }
+        }
+        val heroTop = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(label("YOUR LIBRARY", 10f, Color.parseColor("#FFB27C"), true))
+            val count = label("  •  ${videos.size} VIDEOS", 10f, grayText, true)
+            addView(count)
+        }
+        hero.addView(heroTop)
+        hero.addView(label("Everything you love,\nin one place.", 22f, Color.WHITE, true).apply {
+            setLineSpacing(dp(1).toFloat(), 1f)
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) }
+        })
+        hero.addView(label("Pick up where you left off.", 11f, Color.parseColor("#B9B7C3")).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }
+        })
+
+        searchBar = EditText(this).apply {
+            hint = "Search your videos"
+            setSingleLine(true)
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#777783"))
+            compoundDrawablePadding = dp(8)
+            setPadding(dp(17), 0, dp(17), 0)
+            background = surface(Color.parseColor("#1B1B25"), 15, Color.parseColor("#30303B"))
             visibility = View.GONE
-            layoutParams = LinearLayout.LayoutParams(-1, dp(46)).apply {
-                setMargins(dp(20), 0, dp(20), dp(8))
+            layoutParams = LinearLayout.LayoutParams(-1, dp(48)).apply {
+                setMargins(dp(18), 0, dp(18), dp(12))
             }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
@@ -488,8 +554,9 @@ class MainActivity : Activity() {
 
         sectionLabel = TextView(this).apply {
             textSize = 15f
-            setTextColor(grayText)
-            setPadding(dp(22), dp(8), dp(20), dp(10))
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            setPadding(dp(20), dp(12), dp(20), dp(12))
             setOnClickListener {
                 if (tab == 0 && folderFilter != null) {
                     folderFilter = null
@@ -501,9 +568,9 @@ class MainActivity : Activity() {
         grid = GridView(this).apply {
             numColumns = columns()
             horizontalSpacing = dp(14)
-            verticalSpacing = dp(14)
+            verticalSpacing = dp(17)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
-            setPadding(dp(20), dp(4), dp(20), dp(20))
+            setPadding(dp(18), dp(2), dp(18), dp(20))
             clipToPadding = false
             selector = ColorDrawable(Color.TRANSPARENT)
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -517,9 +584,9 @@ class MainActivity : Activity() {
         foldersGrid = GridView(this).apply {
             numColumns = gridCols()
             horizontalSpacing = dp(14)
-            verticalSpacing = dp(14)
+            verticalSpacing = dp(17)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
-            setPadding(dp(20), dp(4), dp(20), dp(20))
+            setPadding(dp(18), dp(2), dp(18), dp(20))
             clipToPadding = false
             selector = ColorDrawable(Color.TRANSPARENT)
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -533,12 +600,12 @@ class MainActivity : Activity() {
         }
 
         emptyText = TextView(this).apply {
-            textSize = 17f
+            textSize = 15f
             setTextColor(grayText)
             gravity = Gravity.CENTER
             setPadding(dp(30), 0, dp(30), dp(16))
         }
-        allowBtn = pill("Allow access", true, dp(220), dp(52)) {
+        allowBtn = pill("Grant video access", true, dp(230), dp(50)) {
             requestPermissions(arrayOf(permName()), REQ_PERM)
         }
         emptyBox = LinearLayout(this).apply {
@@ -553,21 +620,39 @@ class MainActivity : Activity() {
         body.addView(foldersGrid, FrameLayout.LayoutParams(-1, -1))
         body.addView(emptyBox, FrameLayout.LayoutParams(-1, -1))
 
-        tabVideos = navItem("Videos") { selectTab(0) }
-        tabFolders = navItem("Folders") { selectTab(1) }
+        tabVideos = navItem("VIDEOS") { selectTab(0) }.apply {
+            textSize = 11f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, dp(13), 0, dp(13))
+        }
+        tabFolders = navItem("FOLDERS") { selectTab(1) }.apply {
+            textSize = 11f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, dp(13), 0, dp(13))
+        }
         val bottomNav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(navBg)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(7), dp(3), dp(7), dp(3))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#17171F"))
+                cornerRadius = dp(20).toFloat()
+                setStroke(dp(1), Color.parseColor("#292933"))
+            }
+            layoutParams = LinearLayout.LayoutParams(-1, dp(62)).apply {
+                setMargins(dp(14), dp(4), dp(14), dp(12))
+            }
             addView(tabVideos)
             addView(tabFolders)
-            addView(navItem("Open") { openMenu() })
-            addView(navItem("Words") {
+            addView(navItem("OPEN") { openMenu() }.apply { textSize = 11f })
+            addView(navItem("WORDS") {
                 startActivity(Intent(this@MainActivity, VocabularyActivity::class.java))
-            })
-            addView(navItem("Settings") { openSettings() })
+            }.apply { textSize = 11f })
+            addView(navItem("SETTINGS") { openSettings() }.apply { textSize = 11f })
         }
 
         home.addView(header)
+        home.addView(hero)
         home.addView(searchBar)
         home.addView(sectionLabel)
         home.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))

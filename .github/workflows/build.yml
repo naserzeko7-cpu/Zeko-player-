@@ -20,6 +20,14 @@ jobs:
         with:
           gradle-version: 8.7
 
+      - name: Download official Sherpa-ONNX Android library
+        run: |
+          mkdir -p libs
+          curl --fail --location --retry 3 --retry-delay 2 \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar \
+            --output libs/sherpa-onnx-1.13.8.aar
+          echo "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96  libs/sherpa-onnx-1.13.8.aar" | sha256sum --check
+
       - name: Generate app icon
         run: |
           mkdir -p src/main/res/drawable src/main/res/mipmap-anydpi-v26 src/main/res/mipmap-anydpi

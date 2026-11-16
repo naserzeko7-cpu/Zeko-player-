@@ -44,6 +44,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.GridView
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -1342,11 +1343,15 @@ class MainActivity : Activity() {
             addView(chip("↶  Replay 0.75x") { replayCurrentSubtitle() })
             addView(chip("🔊  Speak") { speakCurrentSubtitle() })
         }
+        val actionScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(actionRow)
+        }
         val bottomCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), 0, dp(24), dp(18))
             addView(timeRow)
-            addView(actionRow)
+            addView(actionScroll)
         }
 
         val scrimTop = View(this).apply {

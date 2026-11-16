@@ -3,6 +3,11 @@ package com.zeko.player
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.PictureInPictureParams
+import android.content.pm.ActivityInfo
+import android.os.Handler
+import android.os.Looper
+import android.util.Rational
 import android.content.ContentUris
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -45,6 +50,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -56,6 +62,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.DefaultTimeBar
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.TimeBar
 import java.util.Locale
@@ -107,6 +114,25 @@ class MainActivity : Activity() {
     private lateinit var titleTv: TextView
     private lateinit var speedBtn: TextView
     private lateinit var ratioBtn: TextView
+    private lateinit var controlsLayer: FrameLayout
+    private lateinit var timeBar: DefaultTimeBar
+    private lateinit var posText: TextView
+    private lateinit var durText: TextView
+    private lateinit var playBtn: TextView
+    private lateinit var lockOverlay: TextView
+    private var controlsVisible = false
+    private var locked = false
+    private var scrubbing = false
+    private var inPip = false
+    private var orient = 0
+    private val ui = Handler(Looper.getMainLooper())
+    private val hideRunnable = Runnable { hideControls() }
+    private val ticker = object : Runnable {
+        override fun run() {
+            updateProgress()
+            ui.postDelayed(this, 500)
+        }
+    }
 
     // Video Seek Preview
     private lateinit var previewBox: LinearLayout
@@ -127,6 +153,7 @@ class MainActivity : Activity() {
     private val REQ_PICK = 1
     private val REQ_PERM = 2
     private val REQ_SUB = 3
+    private val REQ_NOTIF = 4
 
     // library state
     private var videos: List<VideoItem> = emptyList()
@@ -185,6 +212,12 @@ class MainActivity : Activity() {
     private var listMode: Boolean
         get() = prefs.getBoolean("listMode", false)
         set(v) { prefs.edit().putBoolean("listMode", v).apply() }
+    private var bgPlay: Boolean
+        get() = prefs.getBoolean("bgPlay", true)
+        set(v) { prefs.edit().putBoolean("bgPlay", v).apply() }
+    private var pipAuto: Boolean
+        get() = prefs.getBoolean("pipAuto", true)
+        set(v) { prefs.edit().putBoolean("pipAuto", v).apply() }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
@@ -893,6 +926,26 @@ class MainActivity : Activity() {
             switchRow("Keep screen on", "While a video is playing", keepOn) { keepOn = it }
         )
 
+        settingsList.addView(divider())
+        settingsList.addView(
+            switchRow(
+                "Background playback",
+                "Keep playing when you leave the app or turn the screen off",
+                bgPlay
+            ) {
+                bgPlay = it
+                if (it) askNotifPermission()
+            }
+        )
+        settingsList.addView(divider())
+        settingsList.addView(
+            switchRow(
+                "Floating window (PiP)",
+                "Switch to a small floating window when you press Home",
+                pipAuto
+            ) { pipAuto = it }
+        )
+
         settingsList.addView(sectionTitle("SEEK BAR"))
         settingsList.addView(
             switchRow("Video Seek Preview", "Show a thumbnail while you drag the seek bar", previewOn) {
@@ -941,20 +994,42 @@ class MainActivity : Activity() {
     }
 
     // ---------- Player screen ----------
-    private fun textBtn(label: String, onClick: () -> Unit): TextView = TextView(this).apply {
+    private fun chip(label: String, onClick: () -> Unit): TextView = TextView(this).apply {
         text = label
-        textSize = 15f
+        textSize = 14f
         setTextColor(Color.WHITE)
         typeface = Typeface.DEFAULT_BOLD
         gravity = Gravity.CENTER
-        setPadding(dp(14), dp(8), dp(14), dp(8))
+        setPadding(dp(14), dp(7), dp(14), dp(7))
+        background = GradientDrawable().apply {
+            cornerRadius = dp(18).toFloat()
+            setColor(Color.parseColor("#40FFFFFF"))
+        }
+        layoutParams = LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) }
         setOnClickListener { onClick() }
     }
+
+    private fun circleBtn(label: String, size: Int, textSp: Float, onClick: () -> Unit): TextView =
+        TextView(this).apply {
+            text = label
+            textSize = textSp
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                setShape(GradientDrawable.OVAL)
+                setColor(Color.parseColor("#66000000"))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(size), dp(size)).apply {
+                leftMargin = dp(18)
+                rightMargin = dp(18)
+            }
+            setOnClickListener { onClick() }
+        }
 
     private fun buildPlayer() {
         playerView = PlayerView(this).apply {
             visibility = View.GONE
-            controllerShowTimeoutMs = 3000
+            useController = false
             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
         }
 
@@ -973,7 +1048,7 @@ class MainActivity : Activity() {
             override fun onScroll(
                 e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float
             ): Boolean {
-                if (!gesturesOn || e1 == null) return false
+                if (locked || !gesturesOn || e1 == null) return false
                 if (abs(distanceY) < abs(distanceX)) return false
                 val delta = distanceY / playerView.height.coerceAtLeast(1)
                 if (e1.x < playerView.width / 2f) adjustBrightness(delta) else adjustVolume(delta)
@@ -981,23 +1056,28 @@ class MainActivity : Activity() {
             }
 
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                if (locked) {
+                    showUnlock()
+                    return true
+                }
                 val now = System.currentTimeMillis()
                 if (lastSide != 0 && now - lastSeekTime < 700) {
                     seekBy(lastSide)
-                } else if (playerView.isControllerFullyVisible) {
-                    playerView.hideController()
+                } else if (controlsVisible) {
+                    hideControls()
                 } else {
-                    playerView.showController()
+                    showControls()
                 }
                 return true
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
+                if (locked) return true
                 val w = playerView.width.toFloat()
                 when {
                     e.x < w / 3f -> seekBy(-1)
                     e.x > w * 2f / 3f -> seekBy(1)
-                    else -> player?.let { it.playWhenReady = !it.playWhenReady }
+                    else -> togglePlay()
                 }
                 return true
             }
@@ -1041,42 +1121,149 @@ class MainActivity : Activity() {
             visibility = View.GONE
         }
 
+        // ----- top row: back, title, tools -----
         titleTv = TextView(this).apply {
-            textSize = 17f
+            textSize = 18f
             setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
             setSingleLine(true)
             ellipsize = TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
         }
-        speedBtn = textBtn("1x") { chooseSpeed() }
-        ratioBtn = textBtn("Fit") { cycleRatio() }
-        topBar = LinearLayout(this).apply {
+        speedBtn = chip("1x") { chooseSpeed(); scheduleHide() }
+        ratioBtn = chip("Fit") { cycleRatio(); scheduleHide() }
+        val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(10), dp(10), dp(10))
-            setBackgroundColor(Color.parseColor("#66000000"))
-            visibility = View.GONE
+            setPadding(dp(12), dp(16), dp(16), dp(8))
             addView(TextView(this@MainActivity).apply {
                 text = "←"
-                textSize = 26f
+                textSize = 28f
                 setTextColor(Color.WHITE)
-                setPadding(dp(12), dp(2), dp(16), dp(2))
+                setPadding(dp(10), dp(2), dp(16), dp(2))
                 setOnClickListener { stopAndGoHome() }
             })
             addView(titleTv)
+            addView(chip("Audio") { pickTrack(C.TRACK_TYPE_AUDIO, "Audio track") })
+            addView(chip("Subs") { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") })
             addView(speedBtn)
-            addView(textBtn("Audio") { pickTrack(C.TRACK_TYPE_AUDIO, "Audio track") })
-            addView(textBtn("Subs") { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") })
+            addView(chip("PiP") { enterPip() })
             addView(ratioBtn)
         }
-        playerView.setControllerVisibilityListener(
-            PlayerView.ControllerVisibilityListener { v ->
-                topBar.visibility = if (v == View.VISIBLE) View.VISIBLE else View.GONE
+
+        // ----- center: rewind / play / forward -----
+        playBtn = circleBtn("❚❚", 84, 28f) { togglePlay() }
+        val centerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            addView(circleBtn("⏪", 60, 22f) { seekBy(-1); scheduleHide() })
+            addView(playBtn)
+            addView(circleBtn("⏩", 60, 22f) { seekBy(1); scheduleHide() })
+        }
+
+        // ----- bottom: time bar + actions -----
+        posText = TextView(this).apply {
+            text = "00:00"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setPadding(0, 0, dp(10), 0)
+        }
+        durText = TextView(this).apply {
+            text = "--:--"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setPadding(dp(10), 0, 0, 0)
+        }
+        timeBar = DefaultTimeBar(this).apply {
+            setPlayedColor(accent)
+            setScrubberColor(accent)
+            setBufferedColor(Color.parseColor("#80FFFFFF"))
+            setUnplayedColor(Color.parseColor("#40FFFFFF"))
+            layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f)
+        }
+        timeBar.addListener(object : TimeBar.OnScrubListener {
+            override fun onScrubStart(tb: TimeBar, position: Long) {
+                scrubbing = true
+                ui.removeCallbacks(hideRunnable)
             }
-        )
+
+            override fun onScrubMove(tb: TimeBar, position: Long) {
+                posText.text = formatTime(position)
+            }
+
+            override fun onScrubStop(tb: TimeBar, position: Long, canceled: Boolean) {
+                scrubbing = false
+                if (!canceled) player?.seekTo(position)
+                scheduleHide()
+            }
+        })
+        val timeRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(posText)
+            addView(timeBar)
+            addView(durText)
+        }
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(4), 0, 0)
+            addView(chip("🔒  Lock") { lockScreen() })
+            addView(chip("🔄  Rotate") { cycleOrientation(); scheduleHide() })
+        }
+        val bottomCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), 0, dp(24), dp(18))
+            addView(timeRow)
+            addView(actionRow)
+        }
+
+        val scrimTop = View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.parseColor("#B3000000"), Color.TRANSPARENT)
+            )
+        }
+        val scrimBottom = View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(Color.parseColor("#CC000000"), Color.TRANSPARENT)
+            )
+        }
+        controlsLayer = FrameLayout(this).apply {
+            visibility = View.GONE
+            addView(scrimTop, FrameLayout.LayoutParams(-1, dp(130), Gravity.TOP))
+            addView(scrimBottom, FrameLayout.LayoutParams(-1, dp(200), Gravity.BOTTOM))
+            addView(topRow, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+            addView(centerRow, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+            addView(bottomCol, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        }
+
+        lockOverlay = TextView(this).apply {
+            text = "🔓  Unlock"
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(26).toFloat()
+                setColor(Color.parseColor("#B3000000"))
+                setStroke(dp(2), accent)
+            }
+            alpha = 0f
+            visibility = View.GONE
+            setOnClickListener { unlockScreen() }
+        }
 
         root.addView(playerView, FrameLayout.LayoutParams(-1, -1))
-        root.addView(topBar, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+        root.addView(controlsLayer, FrameLayout.LayoutParams(-1, -1))
+        root.addView(
+            lockOverlay,
+            FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_VERTICAL or Gravity.START).apply {
+                leftMargin = dp(28)
+            }
+        )
         root.addView(
             seekLabel,
             FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_VERTICAL or Gravity.END)
@@ -1084,16 +1271,152 @@ class MainActivity : Activity() {
         root.addView(
             hud,
             FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
-                topMargin = dp(80)
+                topMargin = dp(90)
             }
         )
         root.addView(
             watermark,
             FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply {
-                topMargin = dp(64)
+                topMargin = dp(70)
             }
         )
         setupSeekPreview()
+    }
+
+    // ----- controls show / hide / progress -----
+    private fun showControls() {
+        if (locked || inPip) return
+        controlsVisible = true
+        controlsLayer.animate().cancel()
+        controlsLayer.visibility = View.VISIBLE
+        controlsLayer.alpha = 1f
+        updateProgress()
+        scheduleHide()
+    }
+
+    private fun hideControls() {
+        controlsVisible = false
+        ui.removeCallbacks(hideRunnable)
+        controlsLayer.animate().cancel()
+        controlsLayer.animate().alpha(0f).setDuration(200).withEndAction {
+            if (!controlsVisible) controlsLayer.visibility = View.GONE
+        }.start()
+    }
+
+    private fun scheduleHide() {
+        ui.removeCallbacks(hideRunnable)
+        if (controlsVisible && !scrubbing && player?.isPlaying == true) {
+            ui.postDelayed(hideRunnable, 3500)
+        }
+    }
+
+    private fun updateProgress() {
+        val p = player ?: return
+        if (!controlsVisible || scrubbing) return
+        val dur = p.duration
+        val pos = p.currentPosition
+        timeBar.setDuration(if (dur > 0L) dur else C.TIME_UNSET)
+        timeBar.setPosition(pos)
+        timeBar.setBufferedPosition(p.bufferedPosition)
+        posText.text = formatTime(pos)
+        durText.text = if (dur > 0L) formatTime(dur) else "--:--"
+    }
+
+    private fun togglePlay() {
+        val p = player ?: return
+        if (p.isPlaying) {
+            p.pause()
+        } else {
+            if (p.playbackState == Player.STATE_ENDED) p.seekTo(0L)
+            p.play()
+        }
+        scheduleHide()
+    }
+
+    private fun lockScreen() {
+        locked = true
+        hideControls()
+        showHud("🔒  Locked")
+    }
+
+    private fun unlockScreen() {
+        locked = false
+        lockOverlay.animate().cancel()
+        lockOverlay.visibility = View.GONE
+        showControls()
+    }
+
+    private fun showUnlock() {
+        lockOverlay.visibility = View.VISIBLE
+        lockOverlay.animate().cancel()
+        lockOverlay.alpha = 1f
+        lockOverlay.animate().alpha(0f).setStartDelay(2000).setDuration(300).withEndAction {
+            lockOverlay.visibility = View.GONE
+        }.start()
+    }
+
+    private fun cycleOrientation() {
+        orient = (orient + 1) % 3
+        requestedOrientation = when (orient) {
+            1 -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            2 -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+        showHud(arrayOf("Auto rotate", "Landscape", "Portrait")[orient])
+    }
+
+    // ----- floating window (PiP) -----
+    private fun enterPip() {
+        if (Build.VERSION.SDK_INT < 26) {
+            toast("Floating window needs Android 8 or newer")
+            return
+        }
+        val p = player ?: return
+        val vs = p.videoSize
+        var w = vs.width
+        var h = vs.height
+        if (vs.unappliedRotationDegrees % 180 != 0) {
+            val t = w; w = h; h = t
+        }
+        if (w <= 0 || h <= 0) {
+            w = 16
+            h = 9
+        }
+        val ratio = (w.toFloat() / h).coerceIn(0.43f, 2.35f)
+        try {
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational((ratio * 1000).toInt(), 1000))
+                .build()
+            enterPictureInPictureMode(params)
+        } catch (e: Exception) {
+            toast("Floating window is not available (check Android settings)")
+        }
+    }
+
+    // ----- background playback -----
+    private fun askNotifPermission() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF)
+        }
+    }
+
+    private fun startBgService() {
+        PlaybackHolder.player = player
+        PlaybackHolder.title = titleTv.text.toString()
+        val i = Intent(this, PlaybackService::class.java)
+        try {
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun stopBgService() {
+        try {
+            stopService(Intent(this, PlaybackService::class.java))
+        } catch (e: Exception) {
+        }
     }
 
     // ----- gestures: brightness / volume -----
@@ -1252,9 +1575,7 @@ class MainActivity : Activity() {
         }
         root.addView(previewBox, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
 
-        val id = resources.getIdentifier("exo_progress", "id", packageName)
-        val tb = playerView.findViewById<View>(id) as? TimeBar
-        tb?.addListener(object : TimeBar.OnScrubListener {
+        timeBar.addListener(object : TimeBar.OnScrubListener {
             override fun onScrubStart(timeBar: TimeBar, position: Long) {
                 if (!previewOn) return
                 previewTex.alpha = 0f
@@ -1540,9 +1861,29 @@ class MainActivity : Activity() {
                 if (state == Player.STATE_ENDED) prefs.edit().remove("p:" + uri).apply()
             }
         })
+        p.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                .build(),
+            true
+        )
+        p.setHandleAudioBecomingNoisy(true)
+        p.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playBtn.text = if (isPlaying) "❚❚" else "▶"
+                if (isPlaying) scheduleHide() else ui.removeCallbacks(hideRunnable)
+            }
+        })
         p.prepare()
         p.playWhenReady = true
         if (start > 0L) toast("Resumed from " + formatTime(start))
+        locked = false
+        lockOverlay.visibility = View.GONE
+        playBtn.text = "❚❚"
+        showControls()
+        ui.removeCallbacks(ticker)
+        ui.post(ticker)
 
         titleTv.text = title
             ?: uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
@@ -1574,6 +1915,11 @@ class MainActivity : Activity() {
                 Toast.LENGTH_LONG
             ).show()
         }
+
+        if (bgPlay && Build.VERSION.SDK_INT >= 33 && !prefs.getBoolean("notifAsked", false)) {
+            prefs.edit().putBoolean("notifAsked", true).apply()
+            askNotifPermission()
+        }
     }
 
     private fun stopAndGoHome() {
@@ -1586,7 +1932,15 @@ class MainActivity : Activity() {
         currentUri = null
         playerView.player = null
         previewBox.visibility = View.GONE
-        topBar.visibility = View.GONE
+        ui.removeCallbacks(ticker)
+        ui.removeCallbacks(hideRunnable)
+        stopBgService()
+        controlsVisible = false
+        controlsLayer.visibility = View.GONE
+        locked = false
+        lockOverlay.visibility = View.GONE
+        orient = 0
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         playerView.visibility = View.GONE
         watermark.visibility = View.GONE
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1644,19 +1998,65 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.data?.let { play(it) }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (pipAuto && !inPip && playerView.visibility == View.VISIBLE && player?.isPlaying == true) {
+            enterPip()
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean, newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        inPip = isInPictureInPictureMode
+        if (inPip) {
+            controlsVisible = false
+            controlsLayer.visibility = View.GONE
+            watermark.visibility = View.GONE
+            previewBox.visibility = View.GONE
+        } else if (playerView.visibility == View.VISIBLE) {
+            watermark.visibility = if (watermarkOn) View.VISIBLE else View.GONE
+            showControls()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        val p = player
+        if (bgPlay && p != null && playerView.visibility == View.VISIBLE && p.isPlaying) {
+            startBgService()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        stopBgService()
+        if (playerView.visibility == View.VISIBLE) hideSystemBars()
+    }
+
     override fun onStop() {
         super.onStop()
         savePosition()
-        player?.pause()
+        if (!bgPlay) player?.pause()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        ui.removeCallbacks(ticker)
+        ui.removeCallbacks(hideRunnable)
+        stopBgService()
         stripGen++
         previewPlayer?.release()
         previewPlayer = null
         player?.release()
         player = null
+        PlaybackHolder.player = null
         stripPool.shutdown()
         ioExec.shutdown()
     }

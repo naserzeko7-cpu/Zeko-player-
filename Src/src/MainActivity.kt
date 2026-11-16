@@ -111,7 +111,7 @@ class MainActivity : Activity() {
     @Volatile private var liveTranslationEnabled = false
     @Volatile private var liveTranslationRequest = 0L
     private var liveAudioSink: Pcm16kTeeSink? = null
-    private var speechRecognizer: SherpaOnlineSpeechRecognizer? = null
+    private var speechRecognizer: WhisperChunkedSpeechRecognizer? = null
     private var madladTranslator: MadladArabicTranslator? = null
     private var speechModelReady = false
     private var translationModelReady = false
@@ -2028,13 +2028,12 @@ class MainActivity : Activity() {
             if (liveTranslationEnabled) {
                 speechExec.execute {
                     try {
-                        // Use Sherpa streaming hypotheses, translating at a controlled cadence or at phrase end.
-                        val update = speechRecognizer?.acceptAudio(pcm)
-                        val spoken = update?.text?.trim().orEmpty()
+                        // Whisper transcribes local six-second audio chunks; only recognized text is sent to MADLAD.
+                        val spoken = speechRecognizer?.acceptAudio(pcm)?.trim().orEmpty()
                         val now = android.os.SystemClock.elapsedRealtime()
                         val isNewText = spoken.length >= 4 && spoken != lastLiveSpeechText
                         val shouldTranslate = isNewText &&
-                            (update?.isEndpoint == true || now - lastLiveTranslationAt >= 1100L)
+                            (now - lastLiveTranslationAt >= 0L)
                         if (shouldTranslate && liveTranslationEnabled) {
                             lastLiveSpeechText = spoken
                             lastLiveTranslationAt = now
@@ -2216,7 +2215,7 @@ class MainActivity : Activity() {
             return
         }
 
-        val installer = SherpaModelInstaller(this)
+        val installer = WhisperModelInstaller(this)
         if (installer.isInstalled()) {
             prepareLiveModels(installer.modelDirectory())
             return
@@ -2224,7 +2223,7 @@ class MainActivity : Activity() {
 
         AlertDialog.Builder(this)
             .setTitle("إعداد الترجمة الفورية")
-            .setMessage("سيتم تنزيل نموذج تعرّف إنجليزي حجمه نحو 73MB. بعد التنزيل يعمل التعرّف والترجمة محلياً على الجهاز.")
+            .setMessage("سيتم تنزيل نموذج Whisper Small English بحجم يقارب 466MB. يعمل التعرف محلياً على الجهاز، وقد تتأخر الترجمة عدة ثوانٍ حسب سرعة التابلت.")
             .setPositiveButton("تنزيل وبدء") { _, _ ->
                 val loading = AlertDialog.Builder(this)
                     .setTitle("تنزيل نموذج الصوت")
@@ -2257,7 +2256,7 @@ class MainActivity : Activity() {
         toast("جاري تجهيز التعرف الصوتي والترجمة...")
         speechExec.execute {
             try {
-                val recognizer = SherpaOnlineSpeechRecognizer(modelDirectory)
+                val recognizer = WhisperChunkedSpeechRecognizer(this@MainActivity, File(modelDirectory, WhisperModelInstaller.MODEL_FILE))
                 runOnUiThread {
                     if (isFinishing || isDestroyed) {
                         recognizer.close()

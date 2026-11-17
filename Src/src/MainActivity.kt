@@ -1993,6 +1993,30 @@ class MainActivity : Activity() {
             })
         }
 
+        // Keep center controls inside the free space between the top and bottom docks.
+        fun positionCenterControls() {
+            if (controlsLayer.width == 0 || controlsLayer.height == 0) return
+            val landscape = controlsLayer.width > controlsLayer.height
+            modeRow.visibility = if (landscape) View.GONE else View.VISIBLE
+            val safeTop = topRow.bottom + dp(10)
+            val safeBottom = bottomCol.top - dp(10)
+            if (landscape && safeBottom - safeTop < centerPanel.height + dp(8)) {
+                actionRows.visibility = View.GONE
+            } else {
+                actionRows.visibility = View.VISIBLE
+            }
+            val availableCenter = (safeTop + (bottomCol.top - dp(10))) / 2f
+            controlsLayer.post {
+                if (controlsLayer.height > 0) {
+                    centerPanel.translationY = availableCenter - controlsLayer.height / 2f
+                }
+            }
+        }
+        controlsLayer.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> positionCenterControls() }
+        topRow.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> positionCenterControls() }
+        bottomCol.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> positionCenterControls() }
+        centerPanel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> positionCenterControls() }
+
         lockOverlay = TextView(this).apply {
             text = "Unlock"
             textSize = 16f

@@ -159,9 +159,15 @@ class MainActivity : Activity() {
     private var orient = 0
     private val ui = Handler(Looper.getMainLooper())
     private val hideRunnable = Runnable { hideControls() }
+    private var lastPositionSaveAt = 0L
     private val ticker = object : Runnable {
         override fun run() {
             updateProgress()
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (player?.isPlaying == true && now - lastPositionSaveAt >= 5000L) {
+                savePosition()
+                lastPositionSaveAt = now
+            }
             ui.postDelayed(this, 500)
         }
     }

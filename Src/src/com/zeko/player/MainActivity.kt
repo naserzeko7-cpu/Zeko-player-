@@ -124,7 +124,7 @@ class MainActivity : ComponentActivity() {
                 return true
             }
         })
-        screen.setOnTouchListener { _, event -> gestures.onTouchEvent(event); true }
+        videoView.setOnTouchListener { _, event -> gestures.onTouchEvent(event); true }
         page.addView(screen, LinearLayout.LayoutParams(-1, 0, 1f))
         name = label("Nothing playing", 14f, Color.LTGRAY).apply { setPadding(0, d(12), 0, d(6)) }
         page.addView(name)

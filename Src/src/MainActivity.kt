@@ -145,6 +145,7 @@ class MainActivity : Activity() {
     private lateinit var titleTv: TextView
     private lateinit var speedBtn: TextView
     private lateinit var ratioBtn: TextView
+    private lateinit var repeatBtn: TextView
     private lateinit var controlsLayer: FrameLayout
     private lateinit var timeBar: DefaultTimeBar
     private lateinit var posText: TextView
@@ -253,6 +254,9 @@ class MainActivity : Activity() {
     private var subtitleSizeSp: Int
         get() = prefs.getInt("subtitleSizeSp", 20)
         set(v) { prefs.edit().putInt("subtitleSizeSp", v).apply() }
+    private var repeatMode: Int
+        get() = prefs.getInt("repeatMode", Player.REPEAT_MODE_OFF)
+        set(v) { prefs.edit().putInt("repeatMode", v).apply() }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
@@ -1452,6 +1456,7 @@ class MainActivity : Activity() {
         }
         speedBtn = iconChip("1.0×", R.drawable.ic_speed) { chooseSpeed(); scheduleHide() }
         ratioBtn = iconChip("FIT", R.drawable.ic_fit) { cycleRatio(); scheduleHide() }
+        repeatBtn = iconChip(repeatLabel(), R.drawable.ic_repeat) { cycleRepeat(); scheduleHide() }
         val titleLine = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -1473,6 +1478,7 @@ class MainActivity : Activity() {
             addView(iconChip("SUBTITLES", R.drawable.ic_subtitles) { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") })
             addView(speedBtn)
             addView(ratioBtn)
+            addView(repeatBtn)
         }
         val toolScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -1856,6 +1862,23 @@ class MainActivity : Activity() {
                 d.dismiss()
             }
             .show()
+    }
+
+    private fun repeatLabel(): String = when (repeatMode) {
+        Player.REPEAT_MODE_ONE -> "ONE"
+        Player.REPEAT_MODE_ALL -> "ALL"
+        else -> "OFF"
+    }
+
+    private fun cycleRepeat() {
+        repeatMode = when (repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ONE
+            Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ALL
+            else -> Player.REPEAT_MODE_OFF
+        }
+        player?.repeatMode = repeatMode
+        repeatBtn.text = repeatLabel()
+        showHud("Repeat ${repeatLabel().lowercase(Locale.ROOT)}")
     }
 
     private fun cycleRatio() {
@@ -2299,6 +2322,8 @@ class MainActivity : Activity() {
         ratioBtn.text = "Fit"
         speed = 1f
         speedBtn.text = "1x"
+        repeatBtn.text = repeatLabel()
+        p.repeatMode = repeatMode
 
         val start = if (rememberPos) prefs.getLong("p:" + uri, 0L) else 0L
         p.setMediaItem(MediaItem.fromUri(uri), start)

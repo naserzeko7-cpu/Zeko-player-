@@ -69,6 +69,9 @@ class MainActivity : ComponentActivity() {
             cornerRadius = d(13).toFloat()
             setStroke(d(1), Color.rgb(58, 65, 79))
         }
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, d(44)).apply {
+            marginEnd = d(6)
+        }
         setOnClickListener { run() }
     }
 
@@ -106,7 +109,13 @@ class MainActivity : ComponentActivity() {
         name = label("Nothing playing", 14f, Color.LTGRAY).apply { setPadding(0, d(12), 0, d(6)) }
         page.addView(name)
         controls = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(d(8)); setBackgroundColor(Color.rgb(20, 23, 30))
+            orientation = LinearLayout.VERTICAL
+            setPadding(d(10))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.rgb(20, 23, 30))
+                cornerRadius = d(18).toFloat()
+                setStroke(d(1), Color.rgb(42, 48, 60))
+            }
         }
         seek = SeekBar(this).apply {
             max = 1000

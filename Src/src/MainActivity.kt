@@ -587,7 +587,9 @@ class MainActivity : Activity() {
             overScrollMode = View.OVER_SCROLL_NEVER
             this.adapter = this@MainActivity.adapter
             setOnItemClickListener { _, _, pos, _ ->
-                val v = shown[pos]
+                val queue = shown.toList()
+                val v = queue[pos]
+                activeQueue = queue
                 play(v.uri, v.name.substringBeforeLast('.'))
             }
         }
@@ -2425,7 +2427,12 @@ class MainActivity : Activity() {
     }
 
 
-    private fun playbackQueue(): List<VideoItem> = if (shown.isNotEmpty()) shown else videos
+    // Keep the queue captured when playback starts; library searches must not
+    // unexpectedly change which video plays next.
+    private var activeQueue: List<VideoItem>? = null
+
+    private fun playbackQueue(): List<VideoItem> =
+        activeQueue ?: if (shown.isNotEmpty()) shown else videos
 
     private fun playNextVideo(wrap: Boolean = false) {
         val queue = playbackQueue()

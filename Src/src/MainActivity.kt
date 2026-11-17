@@ -146,6 +146,9 @@ class MainActivity : Activity() {
     private lateinit var speedBtn: TextView
     private lateinit var ratioBtn: TextView
     private lateinit var repeatBtn: TextView
+    private lateinit var sleepBtn: TextView
+    private var sleepTimerRunnable: Runnable? = null
+    private var sleepTimerDeadlineMs = 0L
     private lateinit var controlsLayer: FrameLayout
     private lateinit var timeBar: DefaultTimeBar
     private lateinit var posText: TextView
@@ -1470,6 +1473,7 @@ class MainActivity : Activity() {
         speedBtn = iconChip("1.0×", R.drawable.ic_speed) { chooseSpeed(); scheduleHide() }
         ratioBtn = iconChip("FIT", R.drawable.ic_fit) { cycleRatio(); scheduleHide() }
         repeatBtn = iconChip(repeatLabel(), R.drawable.ic_repeat) { cycleRepeat(); scheduleHide() }
+        sleepBtn = iconChip("SLEEP", R.drawable.ic_timer) { showSleepTimer(); scheduleHide() }
         val titleLine = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -1493,6 +1497,7 @@ class MainActivity : Activity() {
             addView(speedBtn)
             addView(ratioBtn)
             addView(repeatBtn)
+            addView(sleepBtn)
         }
         val toolScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -1738,6 +1743,61 @@ class MainActivity : Activity() {
             p.play()
         }
         scheduleHide()
+    }
+
+    private fun showSleepTimer() {
+        if (player == null) {
+            toast("Open a video first")
+            return
+        }
+        val active = sleepTimerRunnable != null
+        val options = arrayOf(
+            "15 minutes",
+            "30 minutes",
+            "45 minutes",
+            "60 minutes",
+            "90 minutes",
+            if (active) "Cancel active timer" else "No active timer"
+        )
+        AlertDialog.Builder(this)
+            .setTitle(if (active) "SLEEP TIMER · ACTIVE" else "SLEEP TIMER")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> setSleepTimer(15)
+                    1 -> setSleepTimer(30)
+                    2 -> setSleepTimer(45)
+                    3 -> setSleepTimer(60)
+                    4 -> setSleepTimer(90)
+                    5 -> if (active) cancelSleepTimer(true)
+                }
+            }
+            .setNegativeButton("CLOSE", null)
+            .show()
+    }
+
+    private fun setSleepTimer(minutes: Int) {
+        cancelSleepTimer(false)
+        val delayMs = minutes * 60_000L
+        sleepTimerDeadlineMs = SystemClock.elapsedRealtime() + delayMs
+        sleepBtn.text = "SLEEP ${minutes}m"
+        val task = Runnable {
+            player?.pause()
+            sleepTimerRunnable = null
+            sleepTimerDeadlineMs = 0L
+            if (::sleepBtn.isInitialized) sleepBtn.text = "SLEEP"
+            toast("Sleep timer finished · playback paused")
+        }
+        sleepTimerRunnable = task
+        ui.postDelayed(task, delayMs)
+        toast("Playback will pause in $minutes minutes")
+    }
+
+    private fun cancelSleepTimer(showMessage: Boolean) {
+        sleepTimerRunnable?.let { ui.removeCallbacks(it) }
+        sleepTimerRunnable = null
+        sleepTimerDeadlineMs = 0L
+        if (::sleepBtn.isInitialized) sleepBtn.text = "SLEEP"
+        if (showMessage) toast("Sleep timer cancelled")
     }
 
     private fun lockScreen() {
@@ -2913,6 +2973,7 @@ class MainActivity : Activity() {
         ui.removeCallbacks(ticker)
         ui.removeCallbacks(hideRunnable)
         stopBgService()
+        cancelSleepTimer(false)
         stripGen++
         previewPlayer?.release()
         previewPlayer = null

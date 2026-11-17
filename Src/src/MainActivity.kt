@@ -131,6 +131,7 @@ class MainActivity : Activity() {
     private lateinit var emptyBox: LinearLayout
     private lateinit var emptyText: TextView
     private lateinit var allowBtn: Button
+    private lateinit var resetFiltersBtn: Button
     private lateinit var sectionLabel: TextView
     private lateinit var continueSection: LinearLayout
     private lateinit var continueCard: TextView
@@ -422,10 +423,11 @@ class MainActivity : Activity() {
         grid.visibility = if (!showEmpty && tab == 0) View.VISIBLE else View.GONE
         foldersGrid.visibility = if (!showEmpty && tab == 1) View.VISIBLE else View.GONE
         allowBtn.visibility = if (granted) View.GONE else View.VISIBLE
+        resetFiltersBtn.visibility = if (noResult) View.VISIBLE else View.GONE
         emptyText.text = when {
             !granted -> "Allow access to show the videos on your device"
             noData -> "No videos found on this device"
-            else -> "No videos match your search"
+            else -> "No videos match your current filters"
         }
         val ff = folderFilter
         sectionLabel.text = when {
@@ -669,11 +671,22 @@ class MainActivity : Activity() {
         allowBtn = pill("Grant video access", true, dp(230), dp(50)) {
             requestPermissions(arrayOf(permName()), REQ_PERM)
         }
+        resetFiltersBtn = pill("Clear filters", false, dp(190), dp(46)) {
+            filterMode = 0
+            folderFilter = null
+            query = ""
+            searchBar.setText("")
+            applyFilter()
+        }.apply {
+            setTextColor(Color.WHITE)
+            visibility = View.GONE
+        }
         emptyBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             addView(emptyText)
             addView(allowBtn)
+            addView(resetFiltersBtn)
         }
 
         val body = FrameLayout(this)

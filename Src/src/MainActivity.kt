@@ -2958,11 +2958,20 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
-        val scroll = ScrollView(this).apply {
-            isFillViewport = true
-            addView(list)
+        val queueSummary = TextView(this).apply {
+            textSize = 12f
+            setTextColor(Color.parseColor("#B8B5C2"))
+            setPadding(dp(18), dp(10), dp(18), dp(8))
         }
-        dialog.setView(scroll)
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(queueSummary)
+            addView(ScrollView(this).apply {
+                isFillViewport = true
+                addView(list)
+            }, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+        dialog.setView(content)
         dialog.show()
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.parseColor("#171720")))
         dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
@@ -2985,6 +2994,13 @@ class MainActivity : Activity() {
         fun rebuild() {
             list.removeAllViews()
             dialog.setTitle("PLAYBACK QUEUE · ${queue.size}")
+            val totalDuration = queue.fold(0L) { total, item ->
+                if (Long.MAX_VALUE - total < item.durMs.coerceAtLeast(0L)) Long.MAX_VALUE
+                else total + item.durMs.coerceAtLeast(0L)
+            }
+            val currentIndex = queue.indexOfFirst { it.uri == currentUri }
+            queueSummary.text = "TOTAL RUNTIME  ·  ${formatTime(totalDuration)}" +
+                if (currentIndex >= 0) "     CURRENT  ·  ${currentIndex + 1}/${queue.size}" else "     NOT IN QUEUE"
             if (queue.isEmpty()) {
                 list.addView(TextView(this).apply {
                     text = "Queue is empty"

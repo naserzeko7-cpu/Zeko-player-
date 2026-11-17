@@ -273,6 +273,7 @@ class MainActivity : Activity() {
     private var shuffleEnabled: Boolean
         get() = prefs.getBoolean("shuffleEnabled", false)
         set(v) { prefs.edit().putBoolean("shuffleEnabled", v).apply() }
+    private val shufflePlayedUris = mutableSetOf<String>()
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
@@ -2015,6 +2016,8 @@ class MainActivity : Activity() {
 
     private fun toggleShuffle() {
         shuffleEnabled = !shuffleEnabled
+        shufflePlayedUris.clear()
+        currentUri?.let { shufflePlayedUris.add(it.toString()) }
         updateModeButtons()
         showHud(if (shuffleEnabled) "Shuffle on" else "Shuffle off")
     }
@@ -2740,7 +2743,16 @@ class MainActivity : Activity() {
         if (queue.isEmpty()) return
         val index = queue.indexOfFirst { it.uri == currentUri }
         val next: VideoItem? = if (shuffleEnabled && queue.size > 1) {
-            queue.filter { it.uri != currentUri }.random()
+            if (shufflePlayedUris.isEmpty()) currentUri?.let { shufflePlayedUris.add(it.toString()) }
+            var candidates = queue.filter {
+                it.uri != currentUri && it.uri.toString() !in shufflePlayedUris
+            }
+            if (candidates.isEmpty() && wrap) {
+                shufflePlayedUris.clear()
+                currentUri?.let { shufflePlayedUris.add(it.toString()) }
+                candidates = queue.filter { it.uri != currentUri }
+            }
+            candidates.randomOrNull()
         } else {
             val nextIndex = if (index < 0) 0 else index + 1
             if (nextIndex in queue.indices) queue[nextIndex]
@@ -2751,6 +2763,7 @@ class MainActivity : Activity() {
             showHud("End of queue")
             return
         }
+        if (shuffleEnabled) shufflePlayedUris.add(next.uri.toString())
         play(next.uri, next.name)
     }
 

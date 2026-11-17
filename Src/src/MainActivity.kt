@@ -2440,6 +2440,7 @@ class MainActivity : Activity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle("PLAYBACK QUEUE · ${queue.size}")
             .setNegativeButton("CLOSE", null)
+            .setPositiveButton("ADD VIDEOS", null)
             .create()
 
         val list = LinearLayout(this).apply {
@@ -2453,6 +2454,29 @@ class MainActivity : Activity() {
         dialog.setView(scroll)
         dialog.show()
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.parseColor("#171720")))
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val candidates = videos.filterNot { candidate -> queue.any { it.uri == candidate.uri } }
+            if (candidates.isEmpty()) {
+                toast("All library videos are already in the queue")
+            } else {
+                val selected = BooleanArray(candidates.size)
+                val names = candidates.map { it.name }.toTypedArray()
+                AlertDialog.Builder(this)
+                    .setTitle("ADD TO PLAYBACK QUEUE")
+                    .setMultiChoiceItems(names, selected) { _, which, checked ->
+                        selected[which] = checked
+                    }
+                    .setNegativeButton("CANCEL", null)
+                    .setPositiveButton("ADD") { _, _ ->
+                        candidates.forEachIndexed { index, item ->
+                            if (selected[index] && queue.none { it.uri == item.uri }) queue.add(item)
+                        }
+                        rebuild()
+                        toast("Queue updated · ${queue.size} videos")
+                    }
+                    .show()
+            }
+        }
 
         fun rebuild() {
             list.removeAllViews()
@@ -2540,7 +2564,7 @@ class MainActivity : Activity() {
         val queue = playbackQueue()
         if (queue.isEmpty()) return
         val index = queue.indexOfFirst { it.uri == currentUri }
-        val nextIndex = index + 1
+        val nextIndex = if (index < 0) 0 else index + 1
         val next: VideoItem? = if (nextIndex in queue.indices) {
             queue[nextIndex]
         } else if (wrap) {

@@ -2454,30 +2454,6 @@ class MainActivity : Activity() {
         dialog.setView(scroll)
         dialog.show()
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.parseColor("#171720")))
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-            val candidates = videos.filterNot { candidate -> queue.any { it.uri == candidate.uri } }
-            if (candidates.isEmpty()) {
-                toast("All library videos are already in the queue")
-            } else {
-                val selected = BooleanArray(candidates.size)
-                val names = candidates.map { it.name }.toTypedArray()
-                AlertDialog.Builder(this)
-                    .setTitle("ADD TO PLAYBACK QUEUE")
-                    .setMultiChoiceItems(names, selected) { _, which, checked ->
-                        selected[which] = checked
-                    }
-                    .setNegativeButton("CANCEL", null)
-                    .setPositiveButton("ADD") { _, _ ->
-                        candidates.forEachIndexed { index, item ->
-                            if (selected[index] && queue.none { it.uri == item.uri }) queue.add(item)
-                        }
-                        rebuild()
-                        toast("Queue updated · ${queue.size} videos")
-                    }
-                    .show()
-            }
-        }
-
         fun rebuild() {
             list.removeAllViews()
             dialog.setTitle("PLAYBACK QUEUE · ${queue.size}")
@@ -2555,6 +2531,29 @@ class MainActivity : Activity() {
                 list.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
                     bottomMargin = dp(8)
                 })
+            }
+        }
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val candidates = videos.filterNot { candidate -> queue.any { it.uri == candidate.uri } }
+            if (candidates.isEmpty()) {
+                toast("All library videos are already in the queue")
+            } else {
+                val selected = BooleanArray(candidates.size)
+                val names = candidates.map { it.name }.toTypedArray()
+                AlertDialog.Builder(this)
+                    .setTitle("ADD TO PLAYBACK QUEUE")
+                    .setMultiChoiceItems(names, selected) { _, which, checked ->
+                        selected[which] = checked
+                    }
+                    .setNegativeButton("CANCEL", null)
+                    .setPositiveButton("ADD") { _, _ ->
+                        candidates.forEachIndexed { index, item ->
+                            if (selected[index] && queue.none { it.uri == item.uri }) queue.add(item)
+                        }
+                        rebuild()
+                        toast("Queue updated · ${queue.size} videos")
+                    }
+                    .show()
             }
         }
         rebuild()

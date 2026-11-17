@@ -328,9 +328,14 @@ class MainActivity : Activity() {
         if (hasPerm()) loadVideos() else updateEmpty()
     }
 
-    private fun sorted(list: List<VideoItem>): List<VideoItem> = when (sortMode) {
+    private fun sorted(list: List<VideoItem>): List<VideoItem> = when (sortMode.coerceIn(0, 4)) {
         1 -> list.sortedBy { it.name.lowercase() }
         2 -> list.sortedByDescending { it.durMs }
+        3 -> list.sortedByDescending { prefs.getLong("watched:" + it.uri, 0L) }
+        4 -> list.sortedWith(
+            compareByDescending<VideoItem> { prefs.getInt("plays:" + it.uri, 0) }
+                .thenByDescending { prefs.getLong("watched:" + it.uri, 0L) }
+        )
         else -> list.sortedByDescending { it.added }
     }
 
@@ -1188,7 +1193,7 @@ class MainActivity : Activity() {
     private fun openSettings() {
         settingsList.removeAllViews()
         val steps = intArrayOf(5, 10, 15, 30)
-        val sortNames = arrayOf("Newest first", "Name (A-Z)", "Longest first")
+        val sortNames = arrayOf("Newest first", "Name (A-Z)", "Longest first", "Recently watched", "Most played")
 
         settingsList.addView(sectionTitle("PLAYBACK"))
         settingsList.addView(settingRow("Double-tap skip", "$seekSec seconds") {
@@ -1264,10 +1269,10 @@ class MainActivity : Activity() {
         )
 
         settingsList.addView(sectionTitle("LIBRARY"))
-        settingsList.addView(settingRow("Sort videos by", sortNames[sortMode.coerceIn(0, 2)]) {
+        settingsList.addView(settingRow("Sort videos by", sortNames[sortMode.coerceIn(0, sortNames.lastIndex)]) {
             AlertDialog.Builder(this)
                 .setTitle("Sort videos by")
-                .setSingleChoiceItems(sortNames, sortMode.coerceIn(0, 2)) { d, w ->
+                .setSingleChoiceItems(sortNames, sortMode.coerceIn(0, sortNames.lastIndex)) { d, w ->
                     sortMode = w
                     videos = sorted(videos)
                     applyFilter()
@@ -2477,7 +2482,15 @@ class MainActivity : Activity() {
         savePosition()
         player?.release()
         currentUri = uri
-        prefs.edit().putString("lastPlayedUri", uri.toString()).apply()
+        prefs.edit()
+            .putString("lastPlayedUri", uri.toString())
+            .putLong("watched:" + uri, System.currentTimeMillis())
+            .putInt("plays:" + uri, prefs.getInt("plays:" + uri, 0) + 1)
+            .apply()
+        if (sortMode >= 3) {
+            videos = sorted(videos)
+            applyFilter()
+        }
         updateContinueWatching()
 
         liveAudioSink?.enabled = false

@@ -32,11 +32,17 @@ class MainActivity : ComponentActivity() {
     private lateinit var clock: TextView
     private lateinit var name: TextView
     private var dragging = false
+    private val queue = mutableListOf<Uri>()
+    private var shuffleButton: Button? = null
 
-    private val picker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            openVideo(uri)
+    private val picker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) {
+            queue.clear()
+            uris.forEach { uri ->
+                try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+                queue.add(uri)
+            }
+            playQueue(0)
         }
     }
 
@@ -55,7 +61,13 @@ class MainActivity : ComponentActivity() {
     }
     private fun action(s: String, run: () -> Unit) = Button(this).apply {
         text = s; isAllCaps = false; textSize = 12f; setTextColor(Color.WHITE)
-        setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(39, 45, 57)))
+        minHeight = d(42); minimumHeight = d(42); minWidth = d(48); minimumWidth = d(48)
+        setPadding(d(12), 0, d(12), 0)
+        background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(Color.rgb(39, 45, 57))
+            cornerRadius = d(13).toFloat()
+            setStroke(d(1), Color.rgb(58, 65, 79))
+        }
         setOnClickListener { run() }
     }
 
@@ -112,10 +124,12 @@ class MainActivity : ComponentActivity() {
         val mainRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         clock = label("00:00 / 00:00", 11f, Color.LTGRAY)
         mainRow.addView(clock, LinearLayout.LayoutParams(0, d(46), 1f))
+        mainRow.addView(action("Prev") { previous() })
         mainRow.addView(action("−10") { exo?.let { it.seekTo((it.currentPosition - 10000).coerceAtLeast(0)) } })
         play = action("▶") { toggle() }
         mainRow.addView(play)
         mainRow.addView(action("+10") { exo?.let { it.seekTo((it.currentPosition + 10000).coerceAtMost(it.duration.coerceAtLeast(0))) } })
+        mainRow.addView(action("Next") { next() })
         mainRow.addView(action("⛶") { pip() })
         controls.addView(mainRow)
         val more = LinearLayout(this).apply { gravity = Gravity.CENTER }
@@ -125,6 +139,12 @@ class MainActivity : ComponentActivity() {
         lateinit var speedButton: Button
         speedButton = action("1.0×") { speed(speedButton) }
         more.addView(speedButton)
+        shuffleButton = action("Shuffle: Off") {
+            val p = exo ?: return@action
+            p.shuffleModeEnabled = !p.shuffleModeEnabled
+            shuffleButton?.text = if (p.shuffleModeEnabled) "Shuffle: On" else "Shuffle: Off"
+        }
+        more.addView(shuffleButton)
         more.addView(action("Audio / Subs") { tracks() })
         controls.addView(more)
         page.addView(controls, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -132,6 +152,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openVideo(uri: Uri) {
+        queue.clear()
+        queue.add(uri)
+        playQueue(0)
+    }
+
+    private fun playQueue(index: Int) {
         if (exo == null) {
             exo = ExoPlayer.Builder(this).build()
             (screen.getChildAt(0) as PlayerView).player = exo
@@ -142,10 +168,11 @@ class MainActivity : ComponentActivity() {
                 }
             })
         }
-        exo?.setMediaItem(MediaItem.fromUri(uri))
+        exo?.setMediaItems(queue.map { MediaItem.fromUri(it) }, index, 0L)
         exo?.prepare()
         exo?.play()
-        name.text = uri.lastPathSegment?.substringAfterLast('/') ?: "Now playing"
+        val uri = queue.getOrNull(index)
+        name.text = uri?.lastPathSegment?.substringAfterLast('/') ?: "Now playing"
         play.text = "Ⅱ"
         screen.getChildAt(1).visibility = View.GONE
         page.removeCallbacks(progressTask)
@@ -164,6 +191,17 @@ class MainActivity : ComponentActivity() {
     private fun fmt(ms: Long): String {
         val s = (ms / 1000).coerceAtLeast(0)
         return String.format(Locale.US, "%02d:%02d", s / 60, s % 60)
+    }
+    private fun next() {
+        val p = exo ?: return
+        if (p.hasNextMediaItem()) p.seekToNextMediaItem()
+        else if (p.repeatMode == Player.REPEAT_MODE_ALL && queue.isNotEmpty()) p.seekTo(0, 0L)
+    }
+    private fun previous() {
+        val p = exo ?: return
+        if (p.currentPosition > 3000) p.seekTo(0)
+        else if (p.hasPreviousMediaItem()) p.seekToPreviousMediaItem()
+        else p.seekTo(0)
     }
     private fun toggle() {
         val p = exo

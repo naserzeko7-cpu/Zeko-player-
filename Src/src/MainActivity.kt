@@ -2802,6 +2802,14 @@ class MainActivity : Activity() {
     }
 
     private fun playPreviousVideo() {
+        // Match familiar media-player behavior: a quick Previous press restarts
+        // the current video; near the beginning it navigates to the prior item.
+        val activePlayer = player
+        if (activePlayer != null && activePlayer.currentPosition > 3_000L) {
+            activePlayer.seekTo(0L)
+            showHud("Restarted video")
+            return
+        }
         val queue = playbackQueue()
         if (shuffleEnabled) {
             val previousUri = shuffleHistory.getOrNull(shuffleHistoryIndex - 1)

@@ -1648,9 +1648,8 @@ class MainActivity : Activity() {
             compoundDrawablePadding = dp(6)
             background = RippleDrawable(ColorStateList.valueOf(Color.parseColor("#33FFFFFF")),
                 GradientDrawable().apply {
-                    cornerRadius = dp(18).toFloat()
-                    setColor(Color.parseColor("#B51A1B24"))
-                    setStroke(dp(1), Color.parseColor("#42434F"))
+                    cornerRadius = dp(19).toFloat()
+                    setColor(Color.parseColor("#D9272833"))
                 }, null)
             minHeight = dp(36)
             layoutParams = LinearLayout.LayoutParams(-2, dp(36)).apply {
@@ -1668,8 +1667,8 @@ class MainActivity : Activity() {
             val isPrimary = label == "▶" || label == "Ⅱ" || label == "❚❚"
             val circleShape = GradientDrawable().apply {
                 setShape(GradientDrawable.OVAL)
-                setColor(if (isPrimary) accent else Color.parseColor("#E6242530"))
-                setStroke(dp(1), if (isPrimary) Color.parseColor("#FFFFB27C") else Color.parseColor("#555B5B68"))
+                setColor(if (isPrimary) accent else Color.parseColor("#E82A2B36"))
+                if (isPrimary) setStroke(dp(1), Color.parseColor("#FFFFC18F"))
             }
             background = RippleDrawable(
                 ColorStateList.valueOf(Color.parseColor("#55FFFFFF")),
@@ -1862,16 +1861,16 @@ class MainActivity : Activity() {
                 setColor(Color.parseColor("#A612121A"))
                 setStroke(dp(1), Color.parseColor("#333D3D48"))
             }
-            fun addControl(view: View, height: Int) {
-                addView(view, LinearLayout.LayoutParams(0, dp(height), 1f).apply {
-                    leftMargin = dp(2); rightMargin = dp(2)
-                })
+            fun addControl(view: View, size: Int) {
+                val cell = FrameLayout(this@MainActivity)
+                cell.addView(view, FrameLayout.LayoutParams(dp(size), dp(size), Gravity.CENTER))
+                addView(cell, LinearLayout.LayoutParams(0, dp(68), 1f))
             }
-            addControl(circleBtn("‹", 44, 17f) { playPreviousVideo(); scheduleHide() }, 46)
-            addControl(circleBtn("−10s", 44, 12f) { seekBy(-1); scheduleHide() }, 46)
+            addControl(circleBtn("‹", 44, 17f) { playPreviousVideo(); scheduleHide() }, 44)
+            addControl(circleBtn("−10s", 44, 12f) { seekBy(-1); scheduleHide() }, 44)
             addControl(playBtn, 60)
-            addControl(circleBtn("+10s", 44, 12f) { seekBy(1); scheduleHide() }, 46)
-            addControl(circleBtn("›", 44, 17f) { playNextVideo(); scheduleHide() }, 46)
+            addControl(circleBtn("+10s", 44, 12f) { seekBy(1); scheduleHide() }, 44)
+            addControl(circleBtn("›", 44, 17f) { playNextVideo(); scheduleHide() }, 44)
         }
 
         val modeRow = LinearLayout(this).apply {
@@ -2346,14 +2345,25 @@ class MainActivity : Activity() {
         if (::repeatBtn.isInitialized) {
             repeatBtn.text = "REPEAT " + repeatLabel()
             repeatBtn.alpha = if (repeatMode == Player.REPEAT_MODE_OFF) 0.78f else 1f
-            repeatBtn.setTextColor(if (repeatMode == Player.REPEAT_MODE_OFF) Color.WHITE else accent)
-            repeatBtn.setCompoundDrawableTintList(ColorStateList.valueOf(if (repeatMode == Player.REPEAT_MODE_OFF) Color.WHITE else accent))
+            val active = repeatMode != Player.REPEAT_MODE_OFF
+            repeatBtn.setTextColor(if (active) accent else Color.parseColor("#E8E7ED"))
+            repeatBtn.setCompoundDrawableTintList(ColorStateList.valueOf(if (active) accent else Color.parseColor("#A9A9B4")))
+            repeatBtn.background = RippleDrawable(ColorStateList.valueOf(Color.parseColor("#33FFFFFF")),
+                GradientDrawable().apply {
+                    cornerRadius = dp(19).toFloat()
+                    setColor(if (active) Color.parseColor("#333B291F") else Color.parseColor("#D9272833"))
+                }, null)
         }
         if (::shuffleBtn.isInitialized) {
             shuffleBtn.text = if (shuffleEnabled) "SHUFFLE ON" else "SHUFFLE OFF"
             shuffleBtn.alpha = if (shuffleEnabled) 1f else 0.78f
-            shuffleBtn.setTextColor(if (shuffleEnabled) accent else Color.WHITE)
-            shuffleBtn.setCompoundDrawableTintList(ColorStateList.valueOf(if (shuffleEnabled) accent else Color.WHITE))
+            shuffleBtn.setTextColor(if (shuffleEnabled) accent else Color.parseColor("#E8E7ED"))
+            shuffleBtn.setCompoundDrawableTintList(ColorStateList.valueOf(if (shuffleEnabled) accent else Color.parseColor("#A9A9B4")))
+            shuffleBtn.background = RippleDrawable(ColorStateList.valueOf(Color.parseColor("#33FFFFFF")),
+                GradientDrawable().apply {
+                    cornerRadius = dp(19).toFloat()
+                    setColor(if (shuffleEnabled) Color.parseColor("#333B291F") else Color.parseColor("#D9272833"))
+                }, null)
         }
     }
 

@@ -148,18 +148,20 @@ class MainActivity : ComponentActivity() {
         }
         shuffleButton = shuffle
         more.addView(shuffle)
-        more.addView(action("Fit") {
+        lateinit var fitButton: Button
+        fitButton = action("Fit") {
             videoView.resizeMode = when (videoView.resizeMode) {
                 AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                 AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
                 else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
             }
-            (it as Button).text = when (videoView.resizeMode) {
+            fitButton.text = when (videoView.resizeMode) {
                 AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Crop"
                 AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"
                 else -> "Fit"
             }
-        })
+        }
+        more.addView(fitButton)
         more.addView(action("Audio / Subs") { tracks() })
         controls.addView(more)
         page.addView(controls, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))

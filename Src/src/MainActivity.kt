@@ -1283,11 +1283,37 @@ class MainActivity : Activity() {
         })
         settingsList.addView(divider())
         settingsList.addView(settingRow("Clear saved positions", "Forget where you stopped in every video") {
-            val e = prefs.edit()
-            for (k in prefs.all.keys) if (k.startsWith("p:")) e.remove(k)
-            e.apply()
-            adapter.notifyDataSetChanged()
-            toast("Cleared")
+            AlertDialog.Builder(this)
+                .setTitle("Clear saved positions?")
+                .setMessage("All saved resume points will be removed. Your watch activity stays intact.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Clear") { _, _ ->
+                    val e = prefs.edit()
+                    for (k in prefs.all.keys) if (k.startsWith("p:")) e.remove(k)
+                    e.apply()
+                    updateContinueWatching()
+                    adapter.notifyDataSetChanged()
+                    toast("Saved positions cleared")
+                }
+                .show()
+        })
+        settingsList.addView(divider())
+        settingsList.addView(settingRow("Clear viewing activity", "Reset recently watched and most played data") {
+            AlertDialog.Builder(this)
+                .setTitle("Clear viewing activity?")
+                .setMessage("This resets play counts and recently watched dates for every video. Saved resume positions will not be affected.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Reset") { _, _ ->
+                    val e = prefs.edit()
+                    for (k in prefs.all.keys) {
+                        if (k.startsWith("watched:") || k.startsWith("plays:")) e.remove(k)
+                    }
+                    e.apply()
+                    videos = sorted(videos)
+                    applyFilter()
+                    toast("Viewing activity reset")
+                }
+                .show()
         })
 
         settingsList.addView(sectionTitle("APPEARANCE"))

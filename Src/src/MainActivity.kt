@@ -2979,7 +2979,7 @@ class MainActivity : Activity() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(queueSummary)
-            addView(ScrollView(this).apply {
+            addView(ScrollView(this@MainActivity).apply {
                 isFillViewport = true
                 addView(list)
             }, LinearLayout.LayoutParams(-1, dp(420)))

@@ -2950,6 +2950,7 @@ class MainActivity : Activity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle("PLAYBACK QUEUE · ${queue.size}")
             .setNegativeButton("CLOSE", null)
+            .setNeutralButton("CLEAR QUEUE", null)
             .setPositiveButton("ADD VIDEOS", null)
             .create()
 
@@ -2964,6 +2965,23 @@ class MainActivity : Activity() {
         dialog.setView(scroll)
         dialog.show()
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.parseColor("#171720")))
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+            if (queue.isEmpty()) {
+                toast("Queue is already empty")
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("CLEAR PLAYBACK QUEUE?")
+                    .setMessage("Remove all ${queue.size} videos from the current queue? Playback will continue, but automatic next-video navigation will stop.")
+                    .setNegativeButton("CANCEL", null)
+                    .setPositiveButton("CLEAR") { _, _ ->
+                        queue.clear()
+                        persistPlaybackQueue()
+                        rebuild()
+                        toast("Playback queue cleared")
+                    }
+                    .show()
+            }
+        }
         fun rebuild() {
             list.removeAllViews()
             dialog.setTitle("PLAYBACK QUEUE · ${queue.size}")

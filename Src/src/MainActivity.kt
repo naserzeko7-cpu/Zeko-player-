@@ -2431,7 +2431,15 @@ class MainActivity : Activity() {
         val queue = playbackQueue()
         if (queue.isEmpty()) return
         val index = queue.indexOfFirst { it.uri == currentUri }
-        val next = queue.getOrNull(index + 1) ?: (if (wrap) queue.firstOrNull() else null) ?: return
+        val nextIndex = index + 1
+        val next: VideoItem? = if (nextIndex in queue.indices) {
+            queue[nextIndex]
+        } else if (wrap) {
+            queue.firstOrNull()
+        } else {
+            null
+        }
+        if (next == null) return
         play(next.uri, next.name)
     }
 

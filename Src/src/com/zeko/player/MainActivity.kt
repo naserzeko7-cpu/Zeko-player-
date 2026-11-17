@@ -139,12 +139,13 @@ class MainActivity : ComponentActivity() {
         lateinit var speedButton: Button
         speedButton = action("1.0×") { speed(speedButton) }
         more.addView(speedButton)
-        shuffleButton = action("Shuffle: Off") {
+        val shuffle = action("Shuffle: Off") {
             val p = exo ?: return@action
             p.shuffleModeEnabled = !p.shuffleModeEnabled
             shuffleButton?.text = if (p.shuffleModeEnabled) "Shuffle: On" else "Shuffle: Off"
         }
-        more.addView(shuffleButton)
+        shuffleButton = shuffle
+        more.addView(shuffle)
         more.addView(action("Audio / Subs") { tracks() })
         controls.addView(more)
         page.addView(controls, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -165,6 +166,11 @@ class MainActivity : ComponentActivity() {
                 override fun onIsPlayingChanged(value: Boolean) { play.text = if (value) "Ⅱ" else "▶" }
                 override fun onMediaMetadataChanged(metadata: androidx.media3.common.MediaMetadata) {
                     name.text = metadata.title ?: "Now playing"
+                }
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    name.text = mediaItem?.mediaMetadata?.title
+                        ?: mediaItem?.localConfiguration?.uri?.lastPathSegment
+                        ?: "Now playing"
                 }
             })
         }

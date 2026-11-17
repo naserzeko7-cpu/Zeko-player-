@@ -1340,6 +1340,32 @@ class MainActivity : Activity() {
         view.setCompoundDrawablesWithIntrinsicBounds(null, icon, null, null)
     }
 
+    private fun modeChip(label: String, iconRes: Int, onClick: () -> Unit): TextView =
+        TextView(this).apply {
+            text = label
+            textSize = 10f
+            letterSpacing = 0.04f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(dp(13), dp(7), dp(13), dp(7))
+            val icon = getDrawable(iconRes)?.mutate()
+            icon?.setTint(Color.WHITE)
+            setCompoundDrawablesWithIntrinsicBounds(icon, null, null, null)
+            compoundDrawablePadding = dp(6)
+            background = RippleDrawable(ColorStateList.valueOf(Color.parseColor("#33FFFFFF")),
+                GradientDrawable().apply {
+                    cornerRadius = dp(18).toFloat()
+                    setColor(Color.parseColor("#B51A1B24"))
+                    setStroke(dp(1), Color.parseColor("#42434F"))
+                }, null)
+            minHeight = dp(36)
+            layoutParams = LinearLayout.LayoutParams(-2, dp(36)).apply {
+                leftMargin = dp(4); rightMargin = dp(4)
+            }
+            setOnClickListener { onClick() }
+        }
+
     private fun circleBtn(label: String, size: Int, textSp: Float, onClick: () -> Unit): TextView =
         TextView(this).apply {
             text = label
@@ -1476,8 +1502,8 @@ class MainActivity : Activity() {
         }
         speedBtn = iconChip("1.0×", R.drawable.ic_speed) { chooseSpeed(); scheduleHide() }
         ratioBtn = iconChip("FIT", R.drawable.ic_fit) { cycleRatio(); scheduleHide() }
-        repeatBtn = iconChip(repeatLabel(), R.drawable.ic_repeat) { cycleRepeat(); scheduleHide() }
-        shuffleBtn = iconChip("SHUFFLE", R.drawable.ic_shuffle) { toggleShuffle(); scheduleHide() }
+        repeatBtn = modeChip("REPEAT OFF", R.drawable.ic_repeat) { cycleRepeat(); scheduleHide() }
+        shuffleBtn = modeChip("SHUFFLE OFF", R.drawable.ic_shuffle) { toggleShuffle(); scheduleHide() }
         updateModeButtons()
         sleepBtn = iconChip("SLEEP", R.drawable.ic_timer) { showSleepTimer(); scheduleHide() }
         val titleLine = LinearLayout(this).apply {
@@ -1502,8 +1528,6 @@ class MainActivity : Activity() {
             addView(iconChip("QUEUE", R.drawable.ic_queue) { showPlaybackQueue(); scheduleHide() })
             addView(speedBtn)
             addView(ratioBtn)
-            addView(repeatBtn)
-            addView(shuffleBtn)
             addView(sleepBtn)
         }
         val toolScroll = HorizontalScrollView(this).apply {
@@ -1541,6 +1565,19 @@ class MainActivity : Activity() {
             } })
             addView(circleBtn("+10s", 48, 13f) { seekBy(1); scheduleHide() })
             addView(circleBtn("›", 48, 18f) { playNextVideo(); scheduleHide() })
+        }
+
+        val modeRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            addView(repeatBtn)
+            addView(shuffleBtn)
+        }
+        val centerPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            addView(modeRow, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(9) })
+            addView(centerRow)
         }
 
         // ----- bottom: time bar + actions -----
@@ -1631,7 +1668,7 @@ class MainActivity : Activity() {
             addView(topRow, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply {
                 leftMargin = dp(14); topMargin = dp(12); rightMargin = dp(14)
             })
-            addView(centerRow, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+            addView(centerPanel, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
             addView(bottomCol, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
                 leftMargin = dp(14); rightMargin = dp(14); bottomMargin = dp(12)
             })
@@ -1984,13 +2021,16 @@ class MainActivity : Activity() {
 
     private fun updateModeButtons() {
         if (::repeatBtn.isInitialized) {
-            repeatBtn.text = repeatLabel()
-            repeatBtn.alpha = if (repeatMode == Player.REPEAT_MODE_OFF) 0.72f else 1f
+            repeatBtn.text = "REPEAT " + repeatLabel()
+            repeatBtn.alpha = if (repeatMode == Player.REPEAT_MODE_OFF) 0.78f else 1f
             repeatBtn.setTextColor(if (repeatMode == Player.REPEAT_MODE_OFF) Color.WHITE else accent)
+            repeatBtn.setCompoundDrawableTintList(ColorStateList.valueOf(if (repeatMode == Player.REPEAT_MODE_OFF) Color.WHITE else accent))
         }
         if (::shuffleBtn.isInitialized) {
-            shuffleBtn.alpha = if (shuffleEnabled) 1f else 0.72f
+            shuffleBtn.text = if (shuffleEnabled) "SHUFFLE ON" else "SHUFFLE OFF"
+            shuffleBtn.alpha = if (shuffleEnabled) 1f else 0.78f
             shuffleBtn.setTextColor(if (shuffleEnabled) accent else Color.WHITE)
+            shuffleBtn.setCompoundDrawableTintList(ColorStateList.valueOf(if (shuffleEnabled) accent else Color.WHITE))
         }
     }
 

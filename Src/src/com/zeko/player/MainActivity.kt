@@ -9,6 +9,8 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Rational
 import android.view.Gravity
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -105,6 +107,24 @@ class MainActivity : ComponentActivity() {
             addView(label("MP4  ·  MKV  ·  MOV  ·  WEBM", 11f, Color.GRAY).apply { gravity = Gravity.CENTER })
         }
         screen.addView(empty, FrameLayout.LayoutParams(-1, -1))
+        val gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean = true
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                val visible = controls.visibility == View.VISIBLE
+                controls.visibility = if (visible) View.GONE else View.VISIBLE
+                name.visibility = if (visible) View.GONE else View.VISIBLE
+                return true
+            }
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                val p = exo ?: return true
+                val forward = e.x >= screen.width / 2f
+                val target = if (forward) p.currentPosition + 10_000L else p.currentPosition - 10_000L
+                p.seekTo(target.coerceIn(0L, p.duration.coerceAtLeast(0L)))
+                Toast.makeText(this@MainActivity, if (forward) "+10 seconds" else "−10 seconds", Toast.LENGTH_SHORT).show()
+                return true
+            }
+        })
+        screen.setOnTouchListener { _, event -> gestures.onTouchEvent(event); true }
         page.addView(screen, LinearLayout.LayoutParams(-1, 0, 1f))
         name = label("Nothing playing", 14f, Color.LTGRAY).apply { setPadding(0, d(12), 0, d(6)) }
         page.addView(name)
@@ -141,7 +161,7 @@ class MainActivity : ComponentActivity() {
         mainRow.addView(play)
         mainRow.addView(action("+10") { exo?.let { it.seekTo((it.currentPosition + 10000).coerceAtMost(it.duration.coerceAtLeast(0))) } })
         mainRow.addView(action("Next") { next() })
-        mainRow.addView(action("⛶") { pip() })
+        mainRow.addView(action("PiP") { pip() })
         controls.addView(mainRow)
         val more = LinearLayout(this).apply { gravity = Gravity.CENTER }
         lateinit var repeatButton: Button
@@ -171,6 +191,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         more.addView(fitButton)
+        more.addView(action("Rotate") { toggleOrientation() })
         more.addView(action("Audio / Subs") { tracks() })
         controls.addView(more)
         page.addView(controls, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -294,6 +315,13 @@ class MainActivity : ComponentActivity() {
                     p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().addOverride(override).build()
                 }
             }.show()
+    }
+    private fun toggleOrientation() {
+        requestedOrientation = if (requestedOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
     }
     private fun pip() {
         if (Build.VERSION.SDK_INT >= 26) {

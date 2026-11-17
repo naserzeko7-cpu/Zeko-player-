@@ -1777,18 +1777,29 @@ class MainActivity : Activity() {
 
     private fun setSleepTimer(minutes: Int) {
         cancelSleepTimer(false)
-        val delayMs = minutes * 60_000L
-        sleepTimerDeadlineMs = SystemClock.elapsedRealtime() + delayMs
-        sleepBtn.text = "SLEEP ${minutes}m"
-        val task = Runnable {
-            player?.pause()
-            sleepTimerRunnable = null
-            sleepTimerDeadlineMs = 0L
-            if (::sleepBtn.isInitialized) sleepBtn.text = "SLEEP"
-            toast("Sleep timer finished · playback paused")
+        sleepTimerDeadlineMs = SystemClock.elapsedRealtime() + minutes * 60_000L
+        val task = object : Runnable {
+            override fun run() {
+                val remaining = sleepTimerDeadlineMs - SystemClock.elapsedRealtime()
+                if (remaining <= 0L) {
+                    player?.pause()
+                    sleepTimerRunnable = null
+                    sleepTimerDeadlineMs = 0L
+                    if (::sleepBtn.isInitialized) sleepBtn.text = "SLEEP"
+                    toast("Sleep timer finished · playback paused")
+                    return
+                }
+                val totalSeconds = (remaining + 999L) / 1000L
+                val mins = totalSeconds / 60L
+                val secs = totalSeconds % 60L
+                if (::sleepBtn.isInitialized) {
+                    sleepBtn.text = "SLEEP %02d:%02d".format(mins, secs)
+                }
+                ui.postDelayed(this, 1000L)
+            }
         }
         sleepTimerRunnable = task
-        ui.postDelayed(task, delayMs)
+        task.run()
         toast("Playback will pause in $minutes minutes")
     }
 

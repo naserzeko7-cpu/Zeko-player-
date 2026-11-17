@@ -1310,25 +1310,26 @@ class MainActivity : Activity() {
 
     private fun iconChip(label: String, iconRes: Int, onClick: () -> Unit): TextView = TextView(this).apply {
         text = label
-        textSize = 11f
+        textSize = 10f
+        letterSpacing = 0.015f
         setTextColor(Color.parseColor("#F3F1F7"))
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         gravity = Gravity.CENTER
-        setPadding(dp(13), dp(8), dp(13), dp(8))
+        setPadding(dp(10), dp(6), dp(10), dp(6))
         val icon = getDrawable(iconRes)?.mutate()
         icon?.setTint(Color.parseColor("#FFB27C"))
         setCompoundDrawablesWithIntrinsicBounds(icon, null, null, null)
-        compoundDrawablePadding = dp(7)
+        compoundDrawablePadding = dp(5)
         val shape = GradientDrawable().apply {
-            cornerRadius = dp(14).toFloat()
+            cornerRadius = dp(12).toFloat()
             setColor(Color.parseColor("#D91C1D27"))
             setStroke(dp(1), Color.parseColor("#454550"))
         }
         background = RippleDrawable(ColorStateList.valueOf(Color.parseColor("#44FFFFFF")), shape, null)
-        minHeight = dp(44)
-        layoutParams = LinearLayout.LayoutParams(-2, dp(44)).apply {
-            leftMargin = dp(5)
-            rightMargin = dp(5)
+        minHeight = dp(40)
+        layoutParams = LinearLayout.LayoutParams(-2, dp(40)).apply {
+            leftMargin = dp(4)
+            rightMargin = dp(4)
         }
         contentDescription = label
         setOnClickListener { onClick() }
@@ -1373,12 +1374,20 @@ class MainActivity : Activity() {
             textSize = textSp
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
+            val isPrimary = label == "▶" || label == "Ⅱ" || label == "❚❚"
+            val circleShape = GradientDrawable().apply {
                 setShape(GradientDrawable.OVAL)
-                setColor(if (label == "▶" || label == "Ⅱ" || label == "❚❚") accent else Color.parseColor("#E6242530"))
-                setStroke(dp(1), if (label == "▶" || label == "Ⅱ" || label == "❚❚")
-                    Color.parseColor("#FFFFB27C") else Color.parseColor("#555B5B68"))
+                setColor(if (isPrimary) accent else Color.parseColor("#E6242530"))
+                setStroke(dp(1), if (isPrimary) Color.parseColor("#FFFFB27C") else Color.parseColor("#555B5B68"))
             }
+            background = RippleDrawable(
+                ColorStateList.valueOf(Color.parseColor("#55FFFFFF")),
+                circleShape,
+                GradientDrawable().apply {
+                    setShape(GradientDrawable.OVAL)
+                    setColor(Color.WHITE)
+                }
+            )
             elevation = if (label == "▶" || label == "Ⅱ" || label == "❚❚") dp(8).toFloat() else dp(2).toFloat()
             layoutParams = LinearLayout.LayoutParams(dp(size), dp(size)).apply {
                 leftMargin = dp(7)
@@ -1485,10 +1494,10 @@ class MainActivity : Activity() {
 
         watermark = TextView(this).apply {
             text = "Zeko Player  •  Zakariya"
-            textSize = 13f
+            textSize = 10f
             setTextColor(Color.WHITE)
-            alpha = 0.55f
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            alpha = 0.28f
+            setPadding(dp(12), dp(8), dp(12), dp(8))
             visibility = View.GONE
         }
 
@@ -1549,7 +1558,7 @@ class MainActivity : Activity() {
         }
 
         // ----- center: rewind / play / forward -----
-        playBtn = circleBtn("❚❚", 68, 24f) { togglePlay() }
+        playBtn = circleBtn("❚❚", 60, 22f) { togglePlay() }
         val centerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -1559,13 +1568,13 @@ class MainActivity : Activity() {
                 setColor(Color.parseColor("#A612121A"))
                 setStroke(dp(1), Color.parseColor("#333D3D48"))
             }
-            addView(circleBtn("‹", 48, 18f) { playPreviousVideo(); scheduleHide() })
-            addView(circleBtn("−10s", 48, 13f) { seekBy(-1); scheduleHide() })
-            addView(playBtn.apply { layoutParams = LinearLayout.LayoutParams(dp(68), dp(68)).apply {
-                leftMargin = dp(12); rightMargin = dp(12)
+            addView(circleBtn("‹", 44, 17f) { playPreviousVideo(); scheduleHide() })
+            addView(circleBtn("−10s", 44, 12f) { seekBy(-1); scheduleHide() })
+            addView(playBtn.apply { layoutParams = LinearLayout.LayoutParams(dp(60), dp(60)).apply {
+                leftMargin = dp(10); rightMargin = dp(10)
             } })
-            addView(circleBtn("+10s", 48, 13f) { seekBy(1); scheduleHide() })
-            addView(circleBtn("›", 48, 18f) { playNextVideo(); scheduleHide() })
+            addView(circleBtn("+10s", 44, 12f) { seekBy(1); scheduleHide() })
+            addView(circleBtn("›", 44, 17f) { playNextVideo(); scheduleHide() })
         }
 
         val modeRow = LinearLayout(this).apply {
@@ -1712,8 +1721,9 @@ class MainActivity : Activity() {
         )
         root.addView(
             watermark,
-            FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply {
-                topMargin = dp(70)
+            FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.START).apply {
+                leftMargin = dp(12)
+                bottomMargin = dp(154)
             }
         )
         liveTranslationOverlay = TextView(this).apply {

@@ -274,6 +274,8 @@ class MainActivity : Activity() {
         get() = prefs.getBoolean("shuffleEnabled", false)
         set(v) { prefs.edit().putBoolean("shuffleEnabled", v).apply() }
     private val shufflePlayedUris = mutableSetOf<String>()
+    private val shuffleHistory = mutableListOf<String>()
+    private var shuffleHistoryIndex = -1
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
@@ -2027,7 +2029,13 @@ class MainActivity : Activity() {
     private fun toggleShuffle() {
         shuffleEnabled = !shuffleEnabled
         shufflePlayedUris.clear()
-        currentUri?.let { shufflePlayedUris.add(it.toString()) }
+        shuffleHistory.clear()
+        shuffleHistoryIndex = -1
+        currentUri?.let {
+            shufflePlayedUris.add(it.toString())
+            shuffleHistory.add(it.toString())
+            shuffleHistoryIndex = 0
+        }
         updateModeButtons()
         showHud(if (shuffleEnabled) "Shuffle on" else "Shuffle off")
     }
@@ -2753,16 +2761,33 @@ class MainActivity : Activity() {
         if (queue.isEmpty()) return
         val index = queue.indexOfFirst { it.uri == currentUri }
         val next: VideoItem? = if (shuffleEnabled && queue.size > 1) {
-            if (shufflePlayedUris.isEmpty()) currentUri?.let { shufflePlayedUris.add(it.toString()) }
-            var candidates = queue.filter {
-                it.uri != currentUri && it.uri.toString() !in shufflePlayedUris
+            // After going back in shuffle history, NEXT retraces that history first.
+            val forwardUri = shuffleHistory.getOrNull(shuffleHistoryIndex + 1)
+            val forwardItem = forwardUri?.let { uri ->
+                queue.firstOrNull { it.uri.toString() == uri }
             }
-            if (candidates.isEmpty() && wrap) {
-                shufflePlayedUris.clear()
-                currentUri?.let { shufflePlayedUris.add(it.toString()) }
-                candidates = queue.filter { it.uri != currentUri }
+            if (forwardItem != null) {
+                shuffleHistoryIndex++
+                forwardItem
+            } else {
+                if (shufflePlayedUris.isEmpty()) currentUri?.let { shufflePlayedUris.add(it.toString()) }
+                var candidates = queue.filter {
+                    it.uri != currentUri && it.uri.toString() !in shufflePlayedUris
+                }
+                if (candidates.isEmpty() && wrap) {
+                    shufflePlayedUris.clear()
+                    currentUri?.let { shufflePlayedUris.add(it.toString()) }
+                    candidates = queue.filter { it.uri != currentUri }
+                }
+                candidates.randomOrNull()?.also { item ->
+                    while (shuffleHistory.size > shuffleHistoryIndex + 1) {
+                        shuffleHistory.removeAt(shuffleHistory.lastIndex)
+                    }
+                    shuffleHistory.add(item.uri.toString())
+                    shuffleHistoryIndex = shuffleHistory.lastIndex
+                    shufflePlayedUris.add(item.uri.toString())
+                }
             }
-            candidates.randomOrNull()
         } else {
             val nextIndex = if (index < 0) 0 else index + 1
             if (nextIndex in queue.indices) queue[nextIndex]
@@ -2773,12 +2798,20 @@ class MainActivity : Activity() {
             showHud("End of queue")
             return
         }
-        if (shuffleEnabled) shufflePlayedUris.add(next.uri.toString())
         play(next.uri, next.name)
     }
 
     private fun playPreviousVideo() {
         val queue = playbackQueue()
+        if (shuffleEnabled) {
+            val previousUri = shuffleHistory.getOrNull(shuffleHistoryIndex - 1)
+            val previous = previousUri?.let { uri -> queue.firstOrNull { it.uri.toString() == uri } }
+            if (previous != null) {
+                shuffleHistoryIndex--
+                play(previous.uri, previous.name)
+                return
+            }
+        }
         val index = queue.indexOfFirst { it.uri == currentUri }
         val previous = queue.getOrNull(index - 1) ?: return
         play(previous.uri, previous.name)

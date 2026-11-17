@@ -1821,20 +1821,23 @@ class MainActivity : Activity() {
             addView(titleTv)
             addView(iconChip("PIP", R.drawable.ic_pip) { enterPip() })
         }
-        val toolRow = LinearLayout(this).apply {
+        fun toolRow(vararg buttons: View) = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(iconChip("AUDIO", R.drawable.ic_audio) { pickTrack(C.TRACK_TYPE_AUDIO, "Audio track") })
-            addView(iconChip("SUBTITLES", R.drawable.ic_subtitles) { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") })
-            addView(iconChip("QUEUE", R.drawable.ic_queue) { showPlaybackQueue(); scheduleHide() })
-            addView(speedBtn)
-            addView(ratioBtn)
-            addView(sleepBtn)
+            buttons.forEach { button ->
+                addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+                    leftMargin = dp(3); rightMargin = dp(3)
+                })
+            }
         }
-        val toolScroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            overScrollMode = View.OVER_SCROLL_NEVER
-            addView(toolRow)
+        val toolRows = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(toolRow(
+                iconChip("AUDIO", R.drawable.ic_audio) { pickTrack(C.TRACK_TYPE_AUDIO, "Audio track") },
+                iconChip("SUBTITLES", R.drawable.ic_subtitles) { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") },
+                iconChip("QUEUE", R.drawable.ic_queue) { showPlaybackQueue(); scheduleHide() }
+            ))
+            addView(toolRow(speedBtn, ratioBtn, sleepBtn), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
         }
         val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1845,7 +1848,7 @@ class MainActivity : Activity() {
                 setStroke(dp(1), Color.parseColor("#383841"))
             }
             addView(titleLine)
-            addView(toolScroll)
+            addView(toolRows)
         }
 
         // ----- center: rewind / play / forward -----
@@ -1853,26 +1856,29 @@ class MainActivity : Activity() {
         val centerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setPadding(dp(5), dp(8), dp(5), dp(8))
             background = GradientDrawable().apply {
                 cornerRadius = dp(28).toFloat()
                 setColor(Color.parseColor("#A612121A"))
                 setStroke(dp(1), Color.parseColor("#333D3D48"))
             }
-            addView(circleBtn("‹", 44, 17f) { playPreviousVideo(); scheduleHide() })
-            addView(circleBtn("−10s", 44, 12f) { seekBy(-1); scheduleHide() })
-            addView(playBtn.apply { layoutParams = LinearLayout.LayoutParams(dp(60), dp(60)).apply {
-                leftMargin = dp(10); rightMargin = dp(10)
-            } })
-            addView(circleBtn("+10s", 44, 12f) { seekBy(1); scheduleHide() })
-            addView(circleBtn("›", 44, 17f) { playNextVideo(); scheduleHide() })
+            fun addControl(view: View, height: Int) {
+                addView(view, LinearLayout.LayoutParams(0, dp(height), 1f).apply {
+                    leftMargin = dp(2); rightMargin = dp(2)
+                })
+            }
+            addControl(circleBtn("‹", 44, 17f) { playPreviousVideo(); scheduleHide() }, 46)
+            addControl(circleBtn("−10s", 44, 12f) { seekBy(-1); scheduleHide() }, 46)
+            addControl(playBtn, 60)
+            addControl(circleBtn("+10s", 44, 12f) { seekBy(1); scheduleHide() }, 46)
+            addControl(circleBtn("›", 44, 17f) { playNextVideo(); scheduleHide() }, 46)
         }
 
         val modeRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            addView(repeatBtn)
-            addView(shuffleBtn)
+            addView(repeatBtn, LinearLayout.LayoutParams(0, dp(38), 1f).apply { rightMargin = dp(4) })
+            addView(shuffleBtn, LinearLayout.LayoutParams(0, dp(38), 1f).apply { leftMargin = dp(4) })
         }
         val centerPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1924,19 +1930,26 @@ class MainActivity : Activity() {
             addView(timeBar)
             addView(durText)
         }
-        val actionRow = LinearLayout(this).apply {
+        fun actionRow(vararg buttons: View) = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(4), 0, 0)
-            addView(chip("Lock") { lockScreen() })
-            addView(chip("Rotate") { cycleOrientation(); scheduleHide() })
-            addView(chip("Save word") { saveSubtitleWord() })
-            addView(chip("Replay line") { replayCurrentSubtitle() })
-            addView(chip("Speak") { speakCurrentSubtitle() })
+            buttons.forEach { button ->
+                addView(button, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                    leftMargin = dp(3); rightMargin = dp(3)
+                })
+            }
         }
-        val actionScroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(actionRow)
+        val actionRows = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(actionRow(
+                chip("Lock") { lockScreen() },
+                chip("Rotate") { cycleOrientation(); scheduleHide() },
+                chip("Save word") { saveSubtitleWord() }
+            ))
+            addView(actionRow(
+                chip("Replay line") { replayCurrentSubtitle() },
+                chip("Speak") { speakCurrentSubtitle() }
+            ), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
         }
         val bottomCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1947,7 +1960,7 @@ class MainActivity : Activity() {
                 setStroke(dp(1), Color.parseColor("#383841"))
             }
             addView(timeRow)
-            addView(actionScroll)
+            addView(actionRows)
         }
 
         val scrimTop = View(this).apply {
@@ -1969,7 +1982,7 @@ class MainActivity : Activity() {
             addView(topRow, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply {
                 leftMargin = dp(14); topMargin = dp(12); rightMargin = dp(14)
             })
-            addView(centerPanel, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+            addView(centerPanel, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER).apply { leftMargin = dp(18); rightMargin = dp(18) })
             addView(bottomCol, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
                 leftMargin = dp(14); rightMargin = dp(14); bottomMargin = dp(12)
             })

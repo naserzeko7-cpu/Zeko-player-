@@ -589,7 +589,7 @@ class MainActivity : Activity() {
             setOnItemClickListener { _, _, pos, _ ->
                 val queue = shown.toList()
                 val v = queue[pos]
-                activeQueue = queue
+                activeQueue = queue.toMutableList()
                 play(v.uri, v.name.substringBeforeLast('.'))
             }
         }
@@ -1481,6 +1481,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             addView(iconChip("AUDIO", R.drawable.ic_audio) { pickTrack(C.TRACK_TYPE_AUDIO, "Audio track") })
             addView(iconChip("SUBTITLES", R.drawable.ic_subtitles) { pickTrack(C.TRACK_TYPE_TEXT, "Subtitles") })
+            addView(iconChip("QUEUE", R.drawable.ic_queue) { showPlaybackQueue(); scheduleHide() })
             addView(speedBtn)
             addView(ratioBtn)
             addView(repeatBtn)
@@ -2429,10 +2430,111 @@ class MainActivity : Activity() {
 
     // Keep the queue captured when playback starts; library searches must not
     // unexpectedly change which video plays next.
-    private var activeQueue: List<VideoItem>? = null
+    private var activeQueue: MutableList<VideoItem>? = null
 
     private fun playbackQueue(): List<VideoItem> =
         activeQueue ?: if (shown.isNotEmpty()) shown else videos
+
+    private fun showPlaybackQueue() {
+        val queue = activeQueue ?: (if (shown.isNotEmpty()) shown else videos).toMutableList().also { activeQueue = it }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("PLAYBACK QUEUE · ${queue.size}")
+            .setNegativeButton("CLOSE", null)
+            .create()
+
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            addView(list)
+        }
+        dialog.setView(scroll)
+        dialog.show()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.parseColor("#171720")))
+
+        fun rebuild() {
+            list.removeAllViews()
+            dialog.setTitle("PLAYBACK QUEUE · ${queue.size}")
+            if (queue.isEmpty()) {
+                list.addView(TextView(this).apply {
+                    text = "Queue is empty"
+                    textSize = 15f
+                    setTextColor(Color.LTGRAY)
+                    gravity = Gravity.CENTER
+                    setPadding(0, dp(28), 0, dp(28))
+                })
+                return
+            }
+            queue.forEachIndexed { index, item ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(12), dp(10), dp(12), dp(10))
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(14).toFloat()
+                        setColor(if (item.uri == currentUri) Color.parseColor("#302C211B") else Color.parseColor("#20202A"))
+                        setStroke(dp(1), if (item.uri == currentUri) Color.parseColor("#FFB27C") else Color.parseColor("#383844"))
+                    }
+                }
+                val title = TextView(this).apply {
+                    text = (if (item.uri == currentUri) "NOW PLAYING  ·  " else "") + item.name
+                    textSize = 14f
+                    typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                    setTextColor(if (item.uri == currentUri) Color.parseColor("#FFB27C") else Color.WHITE)
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                    setPadding(0, 0, 0, dp(8))
+                    setOnClickListener {
+                        dialog.dismiss()
+                        play(item.uri, item.name.substringBeforeLast('.'))
+                    }
+                }
+                row.addView(title)
+                val actions = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                }
+                fun action(label: String, enabled: Boolean = true, click: () -> Unit) {
+                    actions.addView(TextView(this).apply {
+                        text = label
+                        textSize = 11f
+                        gravity = Gravity.CENTER
+                        setTextColor(if (enabled) Color.parseColor("#F3F1F7") else Color.parseColor("#777780"))
+                        setPadding(dp(12), dp(8), dp(12), dp(8))
+                        background = GradientDrawable().apply {
+                            cornerRadius = dp(10).toFloat()
+                            setColor(Color.parseColor("#30303B"))
+                        }
+                        alpha = if (enabled) 1f else 0.45f
+                        isEnabled = enabled
+                        setOnClickListener { click() }
+                    }, LinearLayout.LayoutParams(-2, dp(34)).apply {
+                        leftMargin = dp(5)
+                    })
+                }
+                action("UP", index > 0) {
+                    val moved = queue.removeAt(index)
+                    queue.add(index - 1, moved)
+                    rebuild()
+                }
+                action("DOWN", index < queue.lastIndex) {
+                    val moved = queue.removeAt(index)
+                    queue.add(index + 1, moved)
+                    rebuild()
+                }
+                action("REMOVE") {
+                    queue.removeAt(index)
+                    rebuild()
+                }
+                row.addView(actions)
+                list.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(8)
+                })
+            }
+        }
+        rebuild()
+    }
 
     private fun playNextVideo(wrap: Boolean = false) {
         val queue = playbackQueue()

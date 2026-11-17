@@ -761,7 +761,19 @@ class MainActivity : Activity() {
 
     private fun updateFilterChips() {
         if (!::filterChips.isInitialized) return
-        val labels = arrayOf("All", "Unwatched", "In progress", "Played")
+        val allCount = videos.size
+        val unwatchedCount = videos.count { prefs.getInt("plays:" + it.uri, 0) == 0 }
+        val inProgressCount = videos.count { prefs.getLong("p:" + it.uri, 0L) > 0L }
+        val playedCount = videos.count {
+            prefs.getInt("plays:" + it.uri, 0) > 0 &&
+                prefs.getLong("p:" + it.uri, 0L) == 0L
+        }
+        val labels = arrayOf(
+            "All · $allCount",
+            "Unwatched · $unwatchedCount",
+            "In progress · $inProgressCount",
+            "Played · $playedCount"
+        )
         filterChips.forEachIndexed { index, chip ->
             val selected = filterMode == index
             chip.setTextColor(if (selected) Color.WHITE else grayText)

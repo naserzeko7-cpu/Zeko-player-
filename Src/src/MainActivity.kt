@@ -9,6 +9,8 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Rational
 import android.content.ContentUris
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.Context
 import android.content.pm.PackageManager
@@ -1236,8 +1238,14 @@ class MainActivity : Activity() {
                 play(item.uri, item.name.substringBeforeLast('.'))
             }
             .setNegativeButton("Close", null)
+            .setNeutralButton("Copy details", null)
             .create()
         dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("ZEKO Player video information", infoText.text.toString()))
+            Toast.makeText(this, "Video information copied", Toast.LENGTH_SHORT).show()
+        }
 
         ioExec.execute {
             var size = 0L

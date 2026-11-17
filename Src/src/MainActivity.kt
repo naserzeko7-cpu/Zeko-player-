@@ -2974,23 +2974,6 @@ class MainActivity : Activity() {
         dialog.setView(content)
         dialog.show()
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.parseColor("#171720")))
-        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-            if (queue.isEmpty()) {
-                toast("Queue is already empty")
-            } else {
-                AlertDialog.Builder(this)
-                    .setTitle("CLEAR PLAYBACK QUEUE?")
-                    .setMessage("Remove all ${queue.size} videos from the current queue? Playback will continue, but automatic next-video navigation will stop.")
-                    .setNegativeButton("CANCEL", null)
-                    .setPositiveButton("CLEAR") { _, _ ->
-                        queue.clear()
-                        persistPlaybackQueue()
-                        rebuild()
-                        toast("Playback queue cleared")
-                    }
-                    .show()
-            }
-        }
         fun rebuild() {
             list.removeAllViews()
             dialog.setTitle("PLAYBACK QUEUE · ${queue.size}")
@@ -3080,6 +3063,24 @@ class MainActivity : Activity() {
                 })
             }
         }
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+            if (queue.isEmpty()) {
+                toast("Queue is already empty")
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("CLEAR PLAYBACK QUEUE?")
+                    .setMessage("Remove all ${queue.size} videos from the current queue? Playback will continue, but automatic next-video navigation will stop.")
+                    .setNegativeButton("CANCEL", null)
+                    .setPositiveButton("CLEAR") { _, _ ->
+                        queue.clear()
+                        persistPlaybackQueue()
+                        rebuild()
+                        toast("Playback queue cleared")
+                    }
+                    .show()
+            }
+        }
+
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val candidates = videos.filterNot { candidate -> queue.any { it.uri == candidate.uri } }
             if (candidates.isEmpty()) {

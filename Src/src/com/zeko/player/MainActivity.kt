@@ -130,7 +130,7 @@ class MainActivity : ComponentActivity() {
         page.addView(name)
         controls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(d(10))
+            setPadding(d(10), d(10), d(10), d(10))
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(Color.rgb(20, 23, 30))
                 cornerRadius = d(18).toFloat()

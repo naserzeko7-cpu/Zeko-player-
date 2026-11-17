@@ -26,6 +26,7 @@ class MainActivity : ComponentActivity() {
     private var exo: ExoPlayer? = null
     private lateinit var page: LinearLayout
     private lateinit var screen: FrameLayout
+    private lateinit var videoView: PlayerView
     private lateinit var controls: LinearLayout
     private lateinit var play: Button
     private lateinit var seek: SeekBar
@@ -86,12 +87,13 @@ class MainActivity : ComponentActivity() {
             setPadding(0, 0, 0, d(12))
         })
         screen = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        val pv = PlayerView(this).apply {
+        videoView = PlayerView(this).apply {
             useController = false
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             setShutterBackgroundColor(Color.BLACK)
+            setKeepContentOnPlayerReset(true)
         }
-        screen.addView(pv, FrameLayout.LayoutParams(-1, -1))
+        screen.addView(videoView, FrameLayout.LayoutParams(-1, -1))
         val empty = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
             setBackgroundColor(Color.rgb(18, 21, 28))
@@ -146,6 +148,18 @@ class MainActivity : ComponentActivity() {
         }
         shuffleButton = shuffle
         more.addView(shuffle)
+        more.addView(action("Fit") {
+            videoView.resizeMode = when (videoView.resizeMode) {
+                AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+            }
+            (it as Button).text = when (videoView.resizeMode) {
+                AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Crop"
+                AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"
+                else -> "Fit"
+            }
+        })
         more.addView(action("Audio / Subs") { tracks() })
         controls.addView(more)
         page.addView(controls, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -161,7 +175,7 @@ class MainActivity : ComponentActivity() {
     private fun playQueue(index: Int) {
         if (exo == null) {
             exo = ExoPlayer.Builder(this).build()
-            (screen.getChildAt(0) as PlayerView).player = exo
+            videoView.player = exo
             exo?.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(value: Boolean) { play.text = if (value) "Ⅱ" else "▶" }
                 override fun onMediaMetadataChanged(metadata: androidx.media3.common.MediaMetadata) {
@@ -287,7 +301,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onDestroy() {
         page.removeCallbacks(progressTask)
-        (screen.getChildAt(0) as? PlayerView)?.player = null
+        videoView.player = null
         exo?.release()
         exo = null
         super.onDestroy()

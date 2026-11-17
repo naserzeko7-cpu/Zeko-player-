@@ -79,6 +79,8 @@ import androidx.media3.ui.DefaultTimeBar
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.TimeBar
 import java.util.Locale
+import java.util.Date
+import java.text.DateFormat
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -618,6 +620,10 @@ class MainActivity : Activity() {
                 persistPlaybackQueue()
                 play(v.uri, v.name.substringBeforeLast('.'))
             }
+            setOnItemLongClickListener { _, _, pos, _ ->
+                shown.getOrNull(pos)?.let { showVideoInfo(it) }
+                true
+            }
         }
 
         foldersGrid = GridView(this).apply {
@@ -1059,6 +1065,42 @@ class MainActivity : Activity() {
             loadInto(h, item)
             return card
         }
+    }
+
+    private fun showVideoInfo(item: VideoItem) {
+        val plays = prefs.getInt("plays:" + item.uri, 0)
+        val watched = prefs.getLong("watched:" + item.uri, 0L)
+        val lastViewed = if (watched > 0L) {
+            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.getDefault())
+                .format(Date(watched))
+        } else {
+            "Not watched yet"
+        }
+        val saved = prefs.getLong("p:" + item.uri, 0L)
+        val resume = if (saved > 0L && item.durMs > 0L) {
+            val percent = (saved * 100L / item.durMs).coerceIn(0L, 100L)
+            "$percent% watched · ${formatTime(saved)} saved"
+        } else {
+            "No saved position"
+        }
+        val message = listOf(
+            "Folder     ${item.folder}",
+            "Duration   ${formatTime(item.durMs)}",
+            "Played     $plays ${if (plays == 1) "time" else "times"}",
+            "Last seen  $lastViewed",
+            "Progress   $resume"
+        ).joinToString("\n\n")
+        AlertDialog.Builder(this)
+            .setTitle(item.name.substringBeforeLast('.'))
+            .setMessage(message)
+            .setPositiveButton("Play") { _, _ ->
+                val queue = shown.toList()
+                activeQueue = queue.toMutableList()
+                persistPlaybackQueue()
+                play(item.uri, item.name.substringBeforeLast('.'))
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     private inner class FolderAdapter : BaseAdapter() {

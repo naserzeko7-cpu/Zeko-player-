@@ -1757,6 +1757,7 @@ class MainActivity : Activity() {
             "45 minutes",
             "60 minutes",
             "90 minutes",
+            "120 minutes",
             if (active) "Cancel active timer" else "No active timer"
         )
         AlertDialog.Builder(this)
@@ -1768,7 +1769,8 @@ class MainActivity : Activity() {
                     2 -> setSleepTimer(45)
                     3 -> setSleepTimer(60)
                     4 -> setSleepTimer(90)
-                    5 -> if (active) cancelSleepTimer(true)
+                    5 -> setSleepTimer(120)
+                    6 -> if (active) cancelSleepTimer(true)
                 }
             }
             .setNegativeButton("CLOSE", null)

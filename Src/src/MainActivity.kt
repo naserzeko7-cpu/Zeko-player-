@@ -1809,12 +1809,20 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             addView(TextView(this@MainActivity).apply {
                 text = "‹"
-                textSize = 34f
+                textSize = 30f
                 setTextColor(Color.WHITE)
                 gravity = Gravity.CENTER
-                setPadding(dp(8), 0, dp(16), dp(3))
+                background = RippleDrawable(
+                    ColorStateList.valueOf(Color.parseColor("#44FFFFFF")),
+                    GradientDrawable().apply {
+                        setShape(GradientDrawable.OVAL)
+                        setColor(Color.parseColor("#292A35"))
+                    }, null
+                )
+                contentDescription = "Back to library"
+                elevation = dp(2).toFloat()
                 setOnClickListener { stopAndGoHome() }
-            }, LinearLayout.LayoutParams(dp(42), dp(48)))
+            }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { rightMargin = dp(8) })
             addView(titleTv)
             addView(iconChip("PIP", R.drawable.ic_pip) { enterPip() })
         }

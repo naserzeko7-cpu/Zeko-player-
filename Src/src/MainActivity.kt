@@ -353,6 +353,7 @@ class MainActivity : Activity() {
             }
             runOnUiThread {
                 videos = sorted(list)
+                restorePlaybackQueue(videos)
                 applyFilter()
             }
         }
@@ -590,6 +591,7 @@ class MainActivity : Activity() {
                 val queue = shown.toList()
                 val v = queue[pos]
                 activeQueue = queue.toMutableList()
+                persistPlaybackQueue()
                 play(v.uri, v.name.substringBeforeLast('.'))
             }
         }
@@ -2435,6 +2437,32 @@ class MainActivity : Activity() {
     private fun playbackQueue(): List<VideoItem> =
         activeQueue ?: if (shown.isNotEmpty()) shown else videos
 
+    // Persist queue entries by MediaStore ID; rebuild their content URIs from the
+    // current library scan so Android's media URI format is never guessed.
+    private fun persistPlaybackQueue() {
+        val queue = activeQueue ?: return
+        val stored = JSONArray()
+        queue.forEach { stored.put(it.id) }
+        prefs.edit().putString("playbackQueue", stored.toString()).apply()
+    }
+
+    private fun restorePlaybackQueue(library: List<VideoItem>) {
+        if (activeQueue != null) return
+        val raw = prefs.getString("playbackQueue", null) ?: return
+        try {
+            val stored = JSONArray(raw)
+            val byId = library.associateBy { it.id }
+            val restored = ArrayList<VideoItem>(stored.length())
+            for (i in 0 until stored.length()) {
+                byId[stored.getLong(i)]?.let { restored.add(it) }
+            }
+            activeQueue = restored
+            if (restored.size != stored.length()) persistPlaybackQueue()
+        } catch (_: Exception) {
+            prefs.edit().remove("playbackQueue").apply()
+        }
+    }
+
     private fun showPlaybackQueue() {
         val queue = activeQueue ?: (if (shown.isNotEmpty()) shown else videos).toMutableList().also { activeQueue = it }
         val dialog = AlertDialog.Builder(this)
@@ -2516,15 +2544,18 @@ class MainActivity : Activity() {
                 action("UP", index > 0) {
                     val moved = queue.removeAt(index)
                     queue.add(index - 1, moved)
+                    persistPlaybackQueue()
                     rebuild()
                 }
                 action("DOWN", index < queue.lastIndex) {
                     val moved = queue.removeAt(index)
                     queue.add(index + 1, moved)
+                    persistPlaybackQueue()
                     rebuild()
                 }
                 action("REMOVE") {
                     queue.removeAt(index)
+                    persistPlaybackQueue()
                     rebuild()
                 }
                 row.addView(actions)
@@ -2550,6 +2581,7 @@ class MainActivity : Activity() {
                         candidates.forEachIndexed { index, item ->
                             if (selected[index] && queue.none { it.uri == item.uri }) queue.add(item)
                         }
+                        persistPlaybackQueue()
                         rebuild()
                         toast("Queue updated · ${queue.size} videos")
                     }

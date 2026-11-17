@@ -4,11 +4,11 @@ plugins {
 }
 android {
     namespace = "com.zeko.player"
-    compileSdk = 35
+    compileSdk = 34
     defaultConfig {
         applicationId = "com.zeko.player"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 34
         versionCode = 2
         versionName = "2.0.0"
     }
@@ -27,4 +27,5 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.activity:activity-ktx:1.9.2")
 }

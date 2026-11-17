@@ -1199,16 +1199,36 @@ class MainActivity : Activity() {
         } else {
             "No saved position"
         }
-        val message = listOf(
-            "Folder     ${item.folder}",
-            "Duration   ${formatTime(item.durMs)}",
-            "Played     $plays ${if (plays == 1) "time" else "times"}",
-            "Last seen  $lastViewed",
-            "Progress   $resume"
-        ).joinToString("\n\n")
-        AlertDialog.Builder(this)
+
+        fun formatBytes(bytes: Long): String {
+            if (bytes <= 0L) return "Unknown"
+            val mb = bytes / (1024.0 * 1024.0)
+            return if (mb >= 1024.0) String.format(Locale.getDefault(), "%.2f GB", mb / 1024.0)
+            else String.format(Locale.getDefault(), "%.1f MB", mb)
+        }
+
+        fun buildInfo(technical: String): String = listOf(
+            "LIBRARY",
+            "Folder       ${item.folder}",
+            "Duration     ${formatTime(item.durMs)}",
+            "Played       $plays ${if (plays == 1) "time" else "times"}",
+            "Last seen    $lastViewed",
+            "Progress     $resume",
+            "",
+            "FILE DETAILS",
+            technical
+        ).joinToString("\n")
+
+        val infoText = TextView(this).apply {
+            text = buildInfo("Reading technical details…")
+            textSize = 14f
+            setTextColor(Color.parseColor("#E8E6ED"))
+            setLineSpacing(dp(4).toFloat(), 1f)
+            setPadding(dp(22), dp(8), dp(22), dp(12))
+        }
+        val dialog = AlertDialog.Builder(this)
             .setTitle(item.name.substringBeforeLast('.'))
-            .setMessage(message)
+            .setView(infoText)
             .setPositiveButton("Play") { _, _ ->
                 val queue = shown.toList()
                 activeQueue = queue.toMutableList()
@@ -1216,7 +1236,52 @@ class MainActivity : Activity() {
                 play(item.uri, item.name.substringBeforeLast('.'))
             }
             .setNegativeButton("Close", null)
-            .show()
+            .create()
+        dialog.show()
+
+        ioExec.execute {
+            var size = 0L
+            var mime = "Unknown"
+            var width = 0
+            var height = 0
+            var bitrate = 0L
+            var rotation = 0
+            var retriever: MediaMetadataRetriever? = null
+            try {
+                mime = contentResolver.getType(item.uri) ?: "Unknown"
+                contentResolver.query(item.uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)
+                    ?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val index = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                            if (index >= 0 && !cursor.isNull(index)) size = cursor.getLong(index)
+                        }
+                    }
+                retriever = MediaMetadataRetriever()
+                retriever.setDataSource(this, item.uri)
+                width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                bitrate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull() ?: 0L
+                rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            } catch (_: Exception) {
+            } finally {
+                try { retriever?.release() } catch (_: Exception) { }
+            }
+
+            val dimensions = if (width > 0 && height > 0) {
+                if (rotation == 90 || rotation == 270) "${height} × ${width}" else "${width} × ${height}"
+            } else "Unknown"
+            val technical = listOf(
+                "Resolution   $dimensions",
+                "File size    ${formatBytes(size)}",
+                "Format       $mime",
+                "Bitrate      ${if (bitrate > 0L) "${bitrate / 1000L} kbps" else "Unknown"}"
+            ).joinToString("\n")
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed && dialog.isShowing) {
+                    infoText.text = buildInfo(technical)
+                }
+            }
+        }
     }
 
     private inner class FolderAdapter : BaseAdapter() {

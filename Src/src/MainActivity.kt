@@ -1583,8 +1583,7 @@ class MainActivity : Activity() {
         setPadding(dp(16), dp(9), dp(16), dp(9))
         val shape = GradientDrawable().apply {
             cornerRadius = dp(14).toFloat()
-            setColor(Color.parseColor("#D91C1D27"))
-            setStroke(dp(1), Color.parseColor("#454550"))
+            setColor(Color.parseColor("#E62A2B36"))
         }
         background = RippleDrawable(
             ColorStateList.valueOf(Color.parseColor("#44FFFFFF")),
@@ -1612,9 +1611,8 @@ class MainActivity : Activity() {
         setCompoundDrawablesWithIntrinsicBounds(icon, null, null, null)
         compoundDrawablePadding = dp(5)
         val shape = GradientDrawable().apply {
-            cornerRadius = dp(12).toFloat()
-            setColor(Color.parseColor("#D91C1D27"))
-            setStroke(dp(1), Color.parseColor("#454550"))
+            cornerRadius = dp(14).toFloat()
+            setColor(Color.parseColor("#E62A2B36"))
         }
         background = RippleDrawable(ColorStateList.valueOf(Color.parseColor("#44FFFFFF")), shape, null)
         minHeight = dp(40)
@@ -1882,8 +1880,8 @@ class MainActivity : Activity() {
         val centerPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            addView(modeRow, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(9) })
-            addView(centerRow)
+            addView(modeRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) })
+            addView(centerRow, LinearLayout.LayoutParams(-1, -2))
         }
 
         // ----- bottom: time bar + actions -----

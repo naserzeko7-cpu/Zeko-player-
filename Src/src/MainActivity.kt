@@ -146,6 +146,7 @@ class MainActivity : Activity() {
     private lateinit var speedBtn: TextView
     private lateinit var ratioBtn: TextView
     private lateinit var repeatBtn: TextView
+    private lateinit var shuffleBtn: TextView
     private lateinit var sleepBtn: TextView
     private var sleepTimerRunnable: Runnable? = null
     private var sleepTimerDeadlineMs = 0L
@@ -269,6 +270,9 @@ class MainActivity : Activity() {
     private var repeatMode: Int
         get() = prefs.getInt("repeatMode", Player.REPEAT_MODE_OFF)
         set(v) { prefs.edit().putInt("repeatMode", v).apply() }
+    private var shuffleEnabled: Boolean
+        get() = prefs.getBoolean("shuffleEnabled", false)
+        set(v) { prefs.edit().putBoolean("shuffleEnabled", v).apply() }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
@@ -1473,6 +1477,8 @@ class MainActivity : Activity() {
         speedBtn = iconChip("1.0×", R.drawable.ic_speed) { chooseSpeed(); scheduleHide() }
         ratioBtn = iconChip("FIT", R.drawable.ic_fit) { cycleRatio(); scheduleHide() }
         repeatBtn = iconChip(repeatLabel(), R.drawable.ic_repeat) { cycleRepeat(); scheduleHide() }
+        shuffleBtn = iconChip("SHUFFLE", R.drawable.ic_shuffle) { toggleShuffle(); scheduleHide() }
+        updateModeButtons()
         sleepBtn = iconChip("SLEEP", R.drawable.ic_timer) { showSleepTimer(); scheduleHide() }
         val titleLine = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1497,6 +1503,7 @@ class MainActivity : Activity() {
             addView(speedBtn)
             addView(ratioBtn)
             addView(repeatBtn)
+            addView(shuffleBtn)
             addView(sleepBtn)
         }
         val toolScroll = HorizontalScrollView(this).apply {
@@ -1517,7 +1524,7 @@ class MainActivity : Activity() {
         }
 
         // ----- center: rewind / play / forward -----
-        playBtn = circleBtn("❚❚", 84, 28f) { togglePlay() }
+        playBtn = circleBtn("❚❚", 68, 24f) { togglePlay() }
         val centerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -1527,13 +1534,13 @@ class MainActivity : Activity() {
                 setColor(Color.parseColor("#A612121A"))
                 setStroke(dp(1), Color.parseColor("#333D3D48"))
             }
-            addView(circleBtn("‹", 44, 18f) { playPreviousVideo(); scheduleHide() })
+            addView(circleBtn("‹", 48, 18f) { playPreviousVideo(); scheduleHide() })
             addView(circleBtn("−10s", 48, 13f) { seekBy(-1); scheduleHide() })
-            addView(playBtn.apply { layoutParams = LinearLayout.LayoutParams(dp(72), dp(72)).apply {
-                leftMargin = dp(9); rightMargin = dp(9)
+            addView(playBtn.apply { layoutParams = LinearLayout.LayoutParams(dp(68), dp(68)).apply {
+                leftMargin = dp(12); rightMargin = dp(12)
             } })
             addView(circleBtn("+10s", 48, 13f) { seekBy(1); scheduleHide() })
-            addView(circleBtn("›", 44, 18f) { playNextVideo(); scheduleHide() })
+            addView(circleBtn("›", 48, 18f) { playNextVideo(); scheduleHide() })
         }
 
         // ----- bottom: time bar + actions -----
@@ -1965,8 +1972,26 @@ class MainActivity : Activity() {
             else -> Player.REPEAT_MODE_OFF
         }
         player?.repeatMode = Player.REPEAT_MODE_OFF
-        repeatBtn.text = repeatLabel()
+        updateModeButtons()
         showHud("Repeat ${repeatLabel().lowercase(Locale.ROOT)}")
+    }
+
+    private fun toggleShuffle() {
+        shuffleEnabled = !shuffleEnabled
+        updateModeButtons()
+        showHud(if (shuffleEnabled) "Shuffle on" else "Shuffle off")
+    }
+
+    private fun updateModeButtons() {
+        if (::repeatBtn.isInitialized) {
+            repeatBtn.text = repeatLabel()
+            repeatBtn.alpha = if (repeatMode == Player.REPEAT_MODE_OFF) 0.72f else 1f
+            repeatBtn.setTextColor(if (repeatMode == Player.REPEAT_MODE_OFF) Color.WHITE else accent)
+        }
+        if (::shuffleBtn.isInitialized) {
+            shuffleBtn.alpha = if (shuffleEnabled) 1f else 0.72f
+            shuffleBtn.setTextColor(if (shuffleEnabled) accent else Color.WHITE)
+        }
     }
 
     private fun cycleRatio() {
@@ -2411,7 +2436,7 @@ class MainActivity : Activity() {
         speed = savedPlaybackSpeed
         speedBtn.text = if (speed == 1f) "1x" else "${speed}x"
         p.setPlaybackSpeed(speed)
-        repeatBtn.text = repeatLabel()
+        updateModeButtons()
         p.repeatMode = Player.REPEAT_MODE_OFF
 
         val start = if (rememberPos) prefs.getLong("p:" + uri, 0L) else 0L
@@ -2674,15 +2699,18 @@ class MainActivity : Activity() {
         val queue = playbackQueue()
         if (queue.isEmpty()) return
         val index = queue.indexOfFirst { it.uri == currentUri }
-        val nextIndex = if (index < 0) 0 else index + 1
-        val next: VideoItem? = if (nextIndex in queue.indices) {
-            queue[nextIndex]
-        } else if (wrap) {
-            queue.firstOrNull()
+        val next: VideoItem? = if (shuffleEnabled && queue.size > 1) {
+            queue.filter { it.uri != currentUri }.random()
         } else {
-            null
+            val nextIndex = if (index < 0) 0 else index + 1
+            if (nextIndex in queue.indices) queue[nextIndex]
+            else if (wrap) queue.firstOrNull()
+            else null
         }
-        if (next == null) return
+        if (next == null) {
+            showHud("End of queue")
+            return
+        }
         play(next.uri, next.name)
     }
 

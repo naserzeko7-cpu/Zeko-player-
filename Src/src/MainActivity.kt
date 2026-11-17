@@ -130,6 +130,8 @@ class MainActivity : Activity() {
     private lateinit var emptyText: TextView
     private lateinit var allowBtn: Button
     private lateinit var sectionLabel: TextView
+    private lateinit var continueSection: LinearLayout
+    private lateinit var continueCard: TextView
     private lateinit var searchBar: EditText
     private lateinit var layoutBtn: TextView
     private lateinit var tabVideos: TextView
@@ -371,6 +373,7 @@ class MainActivity : Activity() {
                 videos = sorted(list)
                 restorePlaybackQueue(videos)
                 applyFilter()
+                updateContinueWatching()
             }
         }
     }
@@ -685,6 +688,30 @@ class MainActivity : Activity() {
         home.addView(header)
         home.addView(hero)
         home.addView(searchBar)
+        continueCard = TextView(this).apply {
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(dp(15), dp(12), dp(15), dp(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(15).toFloat()
+                setColor(Color.parseColor("#20202A"))
+                setStroke(dp(1), Color.parseColor("#3B3B48"))
+            }
+            setOnClickListener {
+                val last = prefs.getString("lastPlayedUri", null)
+                val item = videos.firstOrNull { it.uri.toString() == last }
+                if (item != null) play(item.uri, item.name.substringBeforeLast('.'))
+            }
+        }
+        continueSection = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(2), dp(18), dp(10))
+            addView(label("CONTINUE WATCHING", 10f, Color.parseColor("#FFB27C"), true))
+            addView(continueCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
+            visibility = View.GONE
+        }
+        home.addView(continueSection)
         home.addView(sectionLabel)
         home.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
         home.addView(bottomNav)
@@ -2415,6 +2442,23 @@ class MainActivity : Activity() {
         seekLabel.animate().alpha(0f).setStartDelay(700).setDuration(300).start()
     }
 
+    private fun updateContinueWatching() {
+        if (!::continueSection.isInitialized || !::continueCard.isInitialized) return
+        val last = prefs.getString("lastPlayedUri", null)
+        val item = videos.firstOrNull { it.uri.toString() == last }
+        if (item == null) {
+            continueSection.visibility = View.GONE
+            return
+        }
+        val position = prefs.getLong("p:" + item.uri, 0L)
+        val duration = item.durMs
+        val percent = if (duration > 0L) (position * 100L / duration).toInt().coerceIn(0, 100) else 0
+        val remaining = if (duration > position && position > 0L) formatTime(duration - position) else formatTime(duration)
+        val state = if (position > 0L) "RESUME  ·  $remaining LEFT" else "PLAY FROM START"
+        continueCard.text = item.name.substringBeforeLast('.') + "\n" + state + "     " + percent + "%"
+        continueSection.visibility = View.VISIBLE
+    }
+
     private fun savePosition() {
         val p = player ?: return
         val u = currentUri ?: return
@@ -2425,6 +2469,7 @@ class MainActivity : Activity() {
         if (dur > 15000L && pos > 5000L && pos < dur - 8000L) e.putLong("p:" + u, pos)
         else e.remove("p:" + u)
         e.apply()
+        updateContinueWatching()
     }
 
     private fun play(uri: Uri, title: String? = null) {
@@ -2432,6 +2477,8 @@ class MainActivity : Activity() {
         savePosition()
         player?.release()
         currentUri = uri
+        prefs.edit().putString("lastPlayedUri", uri.toString()).apply()
+        updateContinueWatching()
 
         liveAudioSink?.enabled = false
         val pcmSink = Pcm16kTeeSink { pcm ->

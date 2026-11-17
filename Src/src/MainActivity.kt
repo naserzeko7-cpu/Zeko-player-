@@ -2969,7 +2969,7 @@ class MainActivity : Activity() {
             addView(ScrollView(this).apply {
                 isFillViewport = true
                 addView(list)
-            }, LinearLayout.LayoutParams(-1, 0, 1f))
+            }, LinearLayout.LayoutParams(-1, dp(420)))
         }
         dialog.setView(content)
         dialog.show()

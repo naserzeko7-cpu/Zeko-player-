@@ -136,6 +136,7 @@ class MainActivity : Activity() {
     private lateinit var continueCard: TextView
     private lateinit var searchBar: EditText
     private lateinit var filterChips: List<TextView>
+    private lateinit var sortChip: TextView
     private var filterMode = 0
     private lateinit var layoutBtn: TextView
     private lateinit var tabVideos: TextView
@@ -757,6 +758,23 @@ class MainActivity : Activity() {
             }
             chip.text = labels[index]
         }
+        if (::sortChip.isInitialized) {
+            val sortNames = arrayOf("Newest", "Name A–Z", "Longest", "Recent", "Most played")
+            sortChip.text = "Sort: ${sortNames[sortMode.coerceIn(0, sortNames.lastIndex)]}  ▾"
+        }
+    }
+
+    private fun showLibrarySortDialog() {
+        val sortNames = arrayOf("Newest first", "Name (A-Z)", "Longest first", "Recently watched", "Most played")
+        AlertDialog.Builder(this)
+            .setTitle("Sort videos by")
+            .setSingleChoiceItems(sortNames, sortMode.coerceIn(0, sortNames.lastIndex)) { dialog, which ->
+                sortMode = which
+                videos = sorted(videos)
+                applyFilter()
+                dialog.dismiss()
+            }
+            .show()
     }
 
     private fun buildFilterChips(): View {
@@ -782,6 +800,17 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(18), 0, dp(18), dp(10))
             filterChips.forEach { addView(it) }
+            sortChip = TextView(this@MainActivity).apply {
+                textSize = 12f
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                gravity = Gravity.CENTER
+                setPadding(dp(14), dp(9), dp(14), dp(9))
+                layoutParams = LinearLayout.LayoutParams(-2, dp(36)).apply {
+                    rightMargin = dp(8)
+                }
+                setOnClickListener { showLibrarySortDialog() }
+            }
+            addView(sortChip)
         }
         return HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false

@@ -451,6 +451,7 @@ class MainActivity : Activity() {
     private fun selectTab(t: Int) {
         tab = t
         if (::filterChips.isInitialized) filterChips.forEach { it.isEnabled = (t == 0) }
+        if (::sortChip.isInitialized) sortChip.isEnabled = (t == 0)
         tabVideos.setTextColor(if (t == 0) accent else grayText)
         tabFolders.setTextColor(if (t == 1) accent else grayText)
         updateEmpty()

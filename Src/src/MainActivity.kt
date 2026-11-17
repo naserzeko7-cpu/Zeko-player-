@@ -135,6 +135,8 @@ class MainActivity : Activity() {
     private lateinit var continueSection: LinearLayout
     private lateinit var continueCard: TextView
     private lateinit var searchBar: EditText
+    private lateinit var filterChips: List<TextView>
+    private var filterMode = 0
     private lateinit var layoutBtn: TextView
     private lateinit var tabVideos: TextView
     private lateinit var tabFolders: TextView
@@ -388,9 +390,20 @@ class MainActivity : Activity() {
     private fun applyFilter() {
         val q = query.trim().lowercase()
         val ff = folderFilter
-        shown = videos.filter {
-            (ff == null || it.folder == ff) && (q.isEmpty() || it.name.lowercase().contains(q))
+        shown = videos.filter { item ->
+            val saved = prefs.getLong("p:" + item.uri, 0L)
+            val plays = prefs.getInt("plays:" + item.uri, 0)
+            val matchesState = when (filterMode) {
+                1 -> plays == 0
+                2 -> saved > 0L
+                3 -> plays > 0 && saved == 0L
+                else -> true
+            }
+            (ff == null || item.folder == ff) &&
+                (q.isEmpty() || item.name.lowercase().contains(q)) &&
+                matchesState
         }
+        updateFilterChips()
         folders = videos.groupBy { it.folder }
             .map { FolderItem(it.key, it.value.size, it.value[0]) }
             .sortedBy { it.name.lowercase() }
@@ -436,6 +449,7 @@ class MainActivity : Activity() {
 
     private fun selectTab(t: Int) {
         tab = t
+        if (::filterChips.isInitialized) filterChips.forEach { it.isEnabled = (t == 0) }
         tabVideos.setTextColor(if (t == 0) accent else grayText)
         tabFolders.setTextColor(if (t == 1) accent else grayText)
         updateEmpty()
@@ -699,6 +713,7 @@ class MainActivity : Activity() {
         home.addView(header)
         home.addView(hero)
         home.addView(searchBar)
+        home.addView(buildFilterChips())
         continueCard = TextView(this).apply {
             textSize = 13f
             setTextColor(Color.WHITE)
@@ -727,6 +742,52 @@ class MainActivity : Activity() {
         home.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
         home.addView(bottomNav)
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
+    }
+
+    private fun updateFilterChips() {
+        if (!::filterChips.isInitialized) return
+        val labels = arrayOf("All", "Unwatched", "In progress", "Played")
+        filterChips.forEachIndexed { index, chip ->
+            val selected = filterMode == index
+            chip.setTextColor(if (selected) Color.WHITE else grayText)
+            chip.background = GradientDrawable().apply {
+                cornerRadius = dp(18).toFloat()
+                setColor(if (selected) Color.parseColor("#493020") else Color.parseColor("#1D1D27"))
+                setStroke(dp(1), if (selected) accent else Color.parseColor("#30303B"))
+            }
+            chip.text = labels[index]
+        }
+    }
+
+    private fun buildFilterChips(): View {
+        val labels = arrayOf("All", "Unwatched", "In progress", "Played")
+        filterChips = labels.mapIndexed { index, name ->
+            TextView(this).apply {
+                text = name
+                textSize = 12f
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                gravity = Gravity.CENTER
+                setPadding(dp(15), dp(9), dp(15), dp(9))
+                layoutParams = LinearLayout.LayoutParams(-2, dp(36)).apply {
+                    rightMargin = dp(8)
+                }
+                setOnClickListener {
+                    filterMode = index
+                    applyFilter()
+                }
+            }
+        }
+        updateFilterChips()
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(18), 0, dp(18), dp(10))
+            filterChips.forEach { addView(it) }
+        }
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            clipToPadding = false
+            addView(row)
+        }
     }
 
     private fun toggleSearch() {

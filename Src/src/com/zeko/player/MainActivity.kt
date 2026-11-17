@@ -119,8 +119,12 @@ class MainActivity : ComponentActivity() {
         mainRow.addView(action("⛶") { pip() })
         controls.addView(mainRow)
         val more = LinearLayout(this).apply { gravity = Gravity.CENTER }
-        more.addView(action("Repeat: Off") { repeat(this as Button) })
-        more.addView(action("1.0×") { speed(this as Button) })
+        lateinit var repeatButton: Button
+        repeatButton = action("Repeat: Off") { repeat(repeatButton) }
+        more.addView(repeatButton)
+        lateinit var speedButton: Button
+        speedButton = action("1.0×") { speed(speedButton) }
+        more.addView(speedButton)
         more.addView(action("Audio / Subs") { tracks() })
         controls.addView(more)
         page.addView(controls, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))

@@ -254,6 +254,9 @@ class MainActivity : Activity() {
     private var subtitleSizeSp: Int
         get() = prefs.getInt("subtitleSizeSp", 20)
         set(v) { prefs.edit().putInt("subtitleSizeSp", v).apply() }
+    private var savedPlaybackSpeed: Float
+        get() = prefs.getFloat("playbackSpeed", 1f)
+        set(v) { prefs.edit().putFloat("playbackSpeed", v).apply() }
     private var repeatMode: Int
         get() = prefs.getInt("repeatMode", Player.REPEAT_MODE_OFF)
         set(v) { prefs.edit().putInt("repeatMode", v).apply() }
@@ -1857,6 +1860,7 @@ class MainActivity : Activity() {
             .setTitle("Playback speed")
             .setSingleChoiceItems(labels, values.indexOfFirst { it == speed }.coerceAtLeast(0)) { d, w ->
                 speed = values[w]
+                savedPlaybackSpeed = speed
                 p.setPlaybackSpeed(speed)
                 speedBtn.text = if (speed == 1f) "1x" else "${speed}x"
                 d.dismiss()
@@ -1876,7 +1880,7 @@ class MainActivity : Activity() {
             Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ALL
             else -> Player.REPEAT_MODE_OFF
         }
-        player?.repeatMode = repeatMode
+        player?.repeatMode = Player.REPEAT_MODE_OFF
         repeatBtn.text = repeatLabel()
         showHud("Repeat ${repeatLabel().lowercase(Locale.ROOT)}")
     }
@@ -2320,10 +2324,11 @@ class MainActivity : Activity() {
         playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
         ratioIdx = 0
         ratioBtn.text = "Fit"
-        speed = 1f
-        speedBtn.text = "1x"
+        speed = savedPlaybackSpeed
+        speedBtn.text = if (speed == 1f) "1x" else "${speed}x"
+        p.setPlaybackSpeed(speed)
         repeatBtn.text = repeatLabel()
-        p.repeatMode = repeatMode
+        p.repeatMode = Player.REPEAT_MODE_OFF
 
         val start = if (rememberPos) prefs.getLong("p:" + uri, 0L) else 0L
         p.setMediaItem(MediaItem.fromUri(uri), start)
@@ -2345,7 +2350,15 @@ class MainActivity : Activity() {
                     prefs.edit().remove("p:" + uri).apply()
                     if (!endDialogShown) {
                         endDialogShown = true
-                        playNextVideo()
+                        when (repeatMode) {
+                            Player.REPEAT_MODE_ONE -> {
+                                endDialogShown = false
+                                p.seekTo(0L)
+                                p.play()
+                            }
+                            Player.REPEAT_MODE_ALL -> playNextVideo(wrap = true)
+                            else -> playNextVideo()
+                        }
                     }
                 }
             }
@@ -2414,10 +2427,11 @@ class MainActivity : Activity() {
 
     private fun playbackQueue(): List<VideoItem> = if (shown.isNotEmpty()) shown else videos
 
-    private fun playNextVideo() {
+    private fun playNextVideo(wrap: Boolean = false) {
         val queue = playbackQueue()
+        if (queue.isEmpty()) return
         val index = queue.indexOfFirst { it.uri == currentUri }
-        val next = queue.getOrNull(index + 1) ?: return
+        val next = queue.getOrNull(index + 1) ?: if (wrap) queue.firstOrNull() else null ?: return
         play(next.uri, next.name)
     }
 

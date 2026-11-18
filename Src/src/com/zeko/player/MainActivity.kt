@@ -45,6 +45,9 @@ import androidx.media3.ui.PlayerView
 import java.util.Locale
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
+import java.io.File
+import java.io.FileOutputStream
 import org.json.JSONObject
 
 private data class VideoFile(val id: Long, val uri: Uri, val title: String, val duration: Long, val size: Long)
@@ -87,6 +90,8 @@ class MainActivity : ComponentActivity() {
     private val updateExecutor = Executors.newSingleThreadExecutor()
     private var updateDownloadId = -1L
     private var pendingInstallUri: Uri? = null
+    private var expectedUpdateSha256: String? = null
+    private val updatePrefs by lazy { getSharedPreferences("zeko_update_state", MODE_PRIVATE) }
     private val updatePollTask = object : Runnable {
         override fun run() {
             if (updateDownloadId < 0L) return
@@ -98,7 +103,7 @@ class MainActivity : ComponentActivity() {
                         DownloadManager.STATUS_SUCCESSFUL -> {
                             val uri = manager.getUriForDownloadedFile(updateDownloadId)
                             updateDownloadId = -1L
-                            if (uri != null) prepareInstall(uri)
+                            if (uri != null) verifyUpdateAndPrepareInstall(uri)
                             else Toast.makeText(this@MainActivity, "Downloaded update could not be opened.", Toast.LENGTH_LONG).show()
                         }
                         DownloadManager.STATUS_FAILED -> {
@@ -216,14 +221,17 @@ class MainActivity : ComponentActivity() {
                 val currentVersion = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
                 val assets = release.optJSONArray("assets")
                 var apkUrl: String? = null
+                var apkSha256: String? = null
                 if (assets != null) for (i in 0 until assets.length()) {
                     val asset = assets.getJSONObject(i)
-                    if (asset.optString("name").endsWith(".apk", true)) {
+                    if (asset.optString("name").equals("ZekoPlayer-debug.apk", true)) {
                         apkUrl = asset.optString("browser_download_url")
+                        apkSha256 = asset.optString("digest").removePrefix("sha256:")
                         break
                     }
                 }
                 val downloadUrl = apkUrl
+                val downloadSha256 = apkSha256
                 runOnUiThread {
                     if (latestTag.isBlank() || downloadUrl.isNullOrBlank()) {
                         Toast.makeText(this, "No installable update is published yet.", Toast.LENGTH_LONG).show()
@@ -233,7 +241,7 @@ class MainActivity : ComponentActivity() {
                         android.app.AlertDialog.Builder(this)
                             .setTitle("Zeko Player update")
                             .setMessage("Version " + latestTag + " is available. Android will install it over this app; your app data will be kept.")
-                            .setPositiveButton("Download update") { _, _ -> downloadUpdate(downloadUrl) }
+                            .setPositiveButton("Download update") { _, _ -> downloadUpdate(downloadUrl, downloadSha256) }
                             .setNegativeButton("Later", null)
                             .show()
                     }
@@ -258,7 +266,12 @@ class MainActivity : ComponentActivity() {
         return false
     }
 
-    private fun downloadUpdate(downloadUrl: String) {
+    private fun downloadUpdate(downloadUrl: String, sha256: String?) {
+        if (updateDownloadId >= 0L) {
+            Toast.makeText(this, "An update is already downloading.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        expectedUpdateSha256 = sha256?.takeIf { it.matches(Regex("[0-9a-fA-F]{64}")) }
         try {
             val request = DownloadManager.Request(Uri.parse(downloadUrl))
                 .setTitle("Zeko Player update")
@@ -270,6 +283,7 @@ class MainActivity : ComponentActivity() {
                 .setAllowedOverRoaming(false)
             val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
             updateDownloadId = manager.enqueue(request)
+            updatePrefs.edit().putLong("download_id", updateDownloadId).apply()
             Toast.makeText(this, "Update download started. You can keep using the app.", Toast.LENGTH_LONG).show()
             mainHandler.removeCallbacks(updatePollTask)
             mainHandler.postDelayed(updatePollTask, 900L)
@@ -278,9 +292,51 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun verifyUpdateAndPrepareInstall(uri: Uri) {
+        Toast.makeText(this, "Verifying downloaded update…", Toast.LENGTH_SHORT).show()
+        updateExecutor.execute {
+            var tempFile: File? = null
+            try {
+                val digest = MessageDigest.getInstance("SHA-256")
+                tempFile = File.createTempFile("zeko-update-", ".apk", cacheDir)
+                contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(tempFile).use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            digest.update(buffer, 0, count)
+                            output.write(buffer, 0, count)
+                        }
+                    }
+                } ?: throw IllegalStateException("Downloaded APK is unreadable")
+                val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+                val expectedHash = expectedUpdateSha256
+                if (expectedHash != null && !actualHash.equals(expectedHash, true)) {
+                    throw IllegalStateException("APK checksum does not match the published release")
+                }
+                val archive = packageManager.getPackageArchiveInfo(tempFile.absolutePath, 0)
+                    ?: throw IllegalStateException("Downloaded file is not a valid Android package")
+                if (archive.packageName != packageName) throw IllegalStateException("This update belongs to a different application")
+                @Suppress("DEPRECATION")
+                val currentInfo = packageManager.getPackageInfo(packageName, 0)
+                val currentCode = if (Build.VERSION.SDK_INT >= 28) currentInfo.longVersionCode else currentInfo.versionCode.toLong()
+                @Suppress("DEPRECATION")
+                val newCode = if (Build.VERSION.SDK_INT >= 28) archive.longVersionCode else archive.versionCode.toLong()
+                if (newCode <= currentCode) throw IllegalStateException("Downloaded update is not newer than the installed version")
+                runOnUiThread { prepareInstall(uri) }
+            } catch (error: Exception) {
+                runOnUiThread { Toast.makeText(this, "Update verification failed: " + (error.message ?: "invalid APK"), Toast.LENGTH_LONG).show() }
+            } finally {
+                tempFile?.delete()
+            }
+        }
+    }
+
     private fun prepareInstall(uri: Uri) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
             pendingInstallUri = uri
+            updatePrefs.edit().putString("pending_install_uri", uri.toString()).apply()
             android.app.AlertDialog.Builder(this)
                 .setTitle("Allow app updates")
                 .setMessage("Android needs permission to install updates downloaded by Zeko Player. Enable 'Allow from this source', then return to the app.")
@@ -309,8 +365,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
-            pendingInstallUri?.let { uri ->
+            (pendingInstallUri ?: updatePrefs.getString("pending_install_uri", null)?.let(Uri::parse))?.let { uri ->
                 pendingInstallUri = null
+                updatePrefs.edit().remove("pending_install_uri").apply()
                 openUpdateInstaller(uri)
             }
         }

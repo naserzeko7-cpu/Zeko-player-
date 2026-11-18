@@ -17,7 +17,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      - name: Build debug APK
+      - name: Prepare stable signing key
+        if: ${{ secrets.ZEKO_KEYSTORE_BASE64 != '' && secrets.ZEKO_KEYSTORE_PASSWORD != '' }}
+        env:
+          ZEKO_KEYSTORE_BASE64: ${{ secrets.ZEKO_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ZEKO_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/zeko-player-upload.p12"
+          chmod 600 "$RUNNER_TEMP/zeko-player-upload.p12"
+      - name: Build and test APK
+        env:
+          ZEKO_KEYSTORE_PATH: ${{ runner.temp }}/zeko-player-upload.p12
+          ZEKO_KEYSTORE_PASSWORD: ${{ secrets.ZEKO_KEYSTORE_PASSWORD }}
         run: gradle testDebugUnitTest lintDebug assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:

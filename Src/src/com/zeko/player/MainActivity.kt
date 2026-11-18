@@ -1,6 +1,7 @@
 package com.zeko.player
 
 import android.Manifest
+import android.app.DownloadManager
 import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -13,6 +14,7 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Rational
@@ -41,6 +43,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import java.util.Locale
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
 
 private data class VideoFile(val id: Long, val uri: Uri, val title: String, val duration: Long, val size: Long)
 
@@ -79,6 +84,33 @@ class MainActivity : ComponentActivity() {
     private var playerBottomControls: View? = null
     private val controlsHideTask = Runnable { setPlayerControlsVisible(false) }
     private val thumbnailExecutor = Executors.newFixedThreadPool(2)
+    private val updateExecutor = Executors.newSingleThreadExecutor()
+    private var updateDownloadId = -1L
+    private var pendingInstallUri: Uri? = null
+    private val updatePollTask = object : Runnable {
+        override fun run() {
+            if (updateDownloadId < 0L) return
+            val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+            val cursor = manager.query(DownloadManager.Query().setFilterById(updateDownloadId))
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    when (it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
+                        DownloadManager.STATUS_SUCCESSFUL -> {
+                            val uri = manager.getUriForDownloadedFile(updateDownloadId)
+                            updateDownloadId = -1L
+                            if (uri != null) prepareInstall(uri)
+                            else Toast.makeText(this@MainActivity, "Downloaded update could not be opened.", Toast.LENGTH_LONG).show()
+                        }
+                        DownloadManager.STATUS_FAILED -> {
+                            updateDownloadId = -1L
+                            Toast.makeText(this@MainActivity, "Update download failed. Please try again.", Toast.LENGTH_LONG).show()
+                        }
+                        else -> mainHandler.postDelayed(this, 900L)
+                    }
+                } else mainHandler.postDelayed(this, 900L)
+            } ?: mainHandler.postDelayed(this, 900L)
+        }
+    }
     private val mainHandler = Handler(Looper.getMainLooper())
     private val thumbnailCache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
@@ -163,6 +195,125 @@ class MainActivity : ComponentActivity() {
         setPadding(dp(15), dp(10), dp(15), dp(10))
         background = shape(if (primary) blue else Color.rgb(28, 45, 68), 24, if (primary) blue else Color.rgb(54, 78, 109))
         isClickable = true; isFocusable = true; setOnClickListener { click() }
+    }
+
+
+    private fun checkForUpdates() {
+        Toast.makeText(this, "Checking for updates…", Toast.LENGTH_SHORT).show()
+        updateExecutor.execute {
+            try {
+                val connection = URL("https://api.github.com/repos/naserzeko7-cpu/Zeko-player-/releases/latest").openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 12000
+                connection.readTimeout = 12000
+                connection.setRequestProperty("Accept", "application/vnd.github+json")
+                connection.setRequestProperty("User-Agent", "Zeko-Player-Android")
+                val release = try {
+                    if (connection.responseCode !in 200..299) throw IllegalStateException("GitHub HTTP " + connection.responseCode)
+                    JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                } finally { connection.disconnect() }
+                val latestTag = release.optString("tag_name").removePrefix("v")
+                val currentVersion = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+                val assets = release.optJSONArray("assets")
+                var apkUrl: String? = null
+                if (assets != null) for (i in 0 until assets.length()) {
+                    val asset = assets.getJSONObject(i)
+                    if (asset.optString("name").endsWith(".apk", true)) {
+                        apkUrl = asset.optString("browser_download_url")
+                        break
+                    }
+                }
+                val downloadUrl = apkUrl
+                runOnUiThread {
+                    if (latestTag.isBlank() || downloadUrl.isNullOrBlank()) {
+                        Toast.makeText(this, "No installable update is published yet.", Toast.LENGTH_LONG).show()
+                    } else if (!isVersionNewer(latestTag, currentVersion)) {
+                        Toast.makeText(this, "You already have the latest version (" + currentVersion + ").", Toast.LENGTH_LONG).show()
+                    } else {
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle("Zeko Player update")
+                            .setMessage("Version " + latestTag + " is available. Android will install it over this app; your app data will be kept.")
+                            .setPositiveButton("Download update") { _, _ -> downloadUpdate(downloadUrl) }
+                            .setNegativeButton("Later", null)
+                            .show()
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this, "Update check failed: " + (error.message ?: "network error"), Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun isVersionNewer(latest: String, current: String): Boolean {
+        fun parts(value: String) = value.split(".").map { it.toIntOrNull() ?: 0 }
+        val a = parts(latest)
+        val b = parts(current)
+        for (i in 0 until maxOf(a.size, b.size)) {
+            val left = a.getOrElse(i) { 0 }
+            val right = b.getOrElse(i) { 0 }
+            if (left != right) return left > right
+        }
+        return false
+    }
+
+    private fun downloadUpdate(downloadUrl: String) {
+        try {
+            val request = DownloadManager.Request(Uri.parse(downloadUrl))
+                .setTitle("Zeko Player update")
+                .setDescription("Downloading the latest Zeko Player APK")
+                .setMimeType("application/vnd.android.package-archive")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "zeko-player-update.apk")
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(false)
+            val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+            updateDownloadId = manager.enqueue(request)
+            Toast.makeText(this, "Update download started. You can keep using the app.", Toast.LENGTH_LONG).show()
+            mainHandler.removeCallbacks(updatePollTask)
+            mainHandler.postDelayed(updatePollTask, 900L)
+        } catch (error: Exception) {
+            Toast.makeText(this, "Could not start download: " + error.message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun prepareInstall(uri: Uri) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            pendingInstallUri = uri
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Allow app updates")
+                .setMessage("Android needs permission to install updates downloaded by Zeko Player. Enable 'Allow from this source', then return to the app.")
+                .setPositiveButton("Open settings") { _, _ ->
+                    startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + packageName)))
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return
+        }
+        openUpdateInstaller(uri)
+    }
+
+    private fun openUpdateInstaller(uri: Uri) {
+        try {
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(installIntent)
+        } catch (error: Exception) {
+            Toast.makeText(this, "Could not open Android installer: " + error.message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
+            pendingInstallUri?.let { uri ->
+                pendingInstallUri = null
+                openUpdateInstaller(uri)
+            }
+        }
     }
 
     private fun showLoadingScreen(message: String) {
@@ -301,6 +452,8 @@ class MainActivity : ComponentActivity() {
             setPadding(0, dp(4), 0, 0)
         })
         header.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(action("↻ Update", false) { checkForUpdates() })
+        header.addView(Space(this), LinearLayout.LayoutParams(dp(7), 1))
         header.addView(action("⌕", false) { searchDialog() })
         header.addView(Space(this), LinearLayout.LayoutParams(dp(9), 1))
         header.addView(action("＋  Add", true) { picker.launch(arrayOf("video/*")) })
@@ -1080,6 +1233,8 @@ class MainActivity : ComponentActivity() {
         exo?.release()
         exo = null
         thumbnailExecutor.shutdownNow()
+        updateExecutor.shutdownNow()
+        mainHandler.removeCallbacks(updatePollTask)
         previewFuture?.cancel(true)
         seekPreviewExecutor.shutdownNow()
         seekFrameCache.evictAll()

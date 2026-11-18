@@ -58,6 +58,10 @@ class MainActivity : ComponentActivity() {
     private var filter = "All videos"
     private var query = ""
     private var playerVisible = false
+    private var playerTopControls: View? = null
+    private var playerCenterControls: View? = null
+    private var playerBottomControls: View? = null
+    private val controlsHideTask = Runnable { setPlayerControlsVisible(false) }
     private val thumbnailExecutor = Executors.newFixedThreadPool(2)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val thumbnailCache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
@@ -629,6 +633,7 @@ class MainActivity : ComponentActivity() {
             setPadding(dp(13), dp(10), dp(13), dp(10))
         })
         frame.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+        playerTopControls = top
 
         // Hybrid playback controls: prominent center play with precise skip controls
         val center = LinearLayout(this).apply {
@@ -664,6 +669,7 @@ class MainActivity : ComponentActivity() {
             setPadding(dp(12), dp(12), dp(12), dp(12))
         })
         frame.addView(center, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        playerCenterControls = center
 
         // Bottom timeline and secondary tools
         val bottom = LinearLayout(this).apply {
@@ -719,12 +725,30 @@ class MainActivity : ComponentActivity() {
             topMargin = dp(5)
         })
         frame.addView(bottom, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        playerBottomControls = bottom
+        playerView.setOnClickListener {
+            val visible = playerTopControls?.visibility == View.VISIBLE
+            setPlayerControlsVisible(!visible)
+        }
         root.addView(frame)
 
+        setPlayerControlsVisible(true)
         exo?.removeListener(playerListener)
         exo?.addListener(playerListener)
         updatePlayer()
+        scheduleControlsHide()
         root.post(progressTask)
+    }
+    private fun setPlayerControlsVisible(visible: Boolean) {
+        val visibility = if (visible) View.VISIBLE else View.GONE
+        playerTopControls?.visibility = visibility
+        playerCenterControls?.visibility = visibility
+        playerBottomControls?.visibility = visibility
+        if (visible) scheduleControlsHide() else root.removeCallbacks(controlsHideTask)
+    }
+    private fun scheduleControlsHide() {
+        root.removeCallbacks(controlsHideTask)
+        if (exo?.isPlaying == true) root.postDelayed(controlsHideTask, 3500L)
     }
     private fun updatePlayer() {
         val item = exo?.currentMediaItem
@@ -741,7 +765,12 @@ class MainActivity : ComponentActivity() {
             root.postDelayed(this, 500)
         }
     }
-    private fun toggle() { val p = exo ?: return; if (p.isPlaying) p.pause() else p.play(); playView.text = if (p.isPlaying) "Ⅱ" else "▶" }
+    private fun toggle() {
+        val p = exo ?: return
+        if (p.isPlaying) p.pause() else p.play()
+        playView.text = if (p.isPlaying) "Ⅱ" else "▶"
+        if (p.isPlaying) scheduleControlsHide() else setPlayerControlsVisible(true)
+    }
     private fun seekBy(delta: Long) { val p = exo ?: return; p.seekTo((p.currentPosition + delta).coerceIn(0L, p.duration.coerceAtLeast(0))) }
     private fun previous() {
         val p = exo ?: return
@@ -813,6 +842,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         root.removeCallbacks(progressTask)
+        root.removeCallbacks(controlsHideTask)
         exo?.removeListener(playerListener)
         exo?.release()
         exo = null

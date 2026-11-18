@@ -300,6 +300,30 @@ class MainActivity : ComponentActivity() {
             )
         }, FrameLayout.LayoutParams(-1, -1))
 
+        // Small collection counter anchors the hero without covering its artwork.
+        val collectionBadge = txt("${allItems.size} VIDEOS", 9f, Color.WHITE, true).apply {
+            letterSpacing = .08f
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = shape(Color.argb(190, 7, 19, 34), 18, Color.argb(125, 115, 177, 239))
+        }
+        hero.addView(collectionBadge, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
+            setMargins(0, dp(16), dp(16), 0)
+        })
+
+        // Decorative blue accent adds depth while keeping the video art dominant.
+        val heroAccent = View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.TRANSPARENT)
+                setStroke(dp(1), Color.argb(95, 112, 181, 255))
+            }
+            alpha = .65f
+        }
+        hero.addView(heroAccent, FrameLayout.LayoutParams(dp(116), dp(116), Gravity.END or Gravity.CENTER_VERTICAL).apply {
+            setMargins(0, 0, dp(18), 0)
+        })
+
         val heroContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL

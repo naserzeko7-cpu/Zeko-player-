@@ -28,6 +28,8 @@ import android.widget.*
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -97,7 +99,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.statusBarColor = bg
         window.navigationBarColor = bg
         root = FrameLayout(this).apply { setBackgroundColor(bg) }
@@ -244,6 +245,7 @@ class MainActivity : ComponentActivity() {
         root.removeCallbacks(progressTask)
         exo?.removeListener(playerListener)
         playerVisible = false
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         root.removeAllViews()
         root.setBackgroundColor(bg)
 
@@ -579,7 +581,16 @@ class MainActivity : ComponentActivity() {
     }
     private fun playAt(index: Int) {
         if (queue.isEmpty()) return
-        if (exo == null) exo = ExoPlayer.Builder(this).build()
+        if (exo == null) exo = ExoPlayer.Builder(this).build().apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .build(),
+                true
+            )
+            setHandleAudioBecomingNoisy(true)
+        }
         showPlayer()
         playerView.player = exo
         exo?.setMediaItems(queue.map { video ->
@@ -593,6 +604,7 @@ class MainActivity : ComponentActivity() {
     }
     private fun showPlayer() {
         playerVisible = true
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         root.removeCallbacks(progressTask)
         root.removeAllViews()
         val metrics = resources.displayMetrics

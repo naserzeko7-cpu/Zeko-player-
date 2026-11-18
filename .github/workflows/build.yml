@@ -35,7 +35,7 @@ jobs:
           path: build/outputs/apk/debug/*.apk
       - name: Read app version
         run: |
-          VERSION_NAME=$(sed -n 's/.*versionName = "\\([^"]*\\)".*/\\1/p' build.gradle.kts | head -n 1)
+          VERSION_NAME=$(grep -oE 'versionName = "[^"]+"' build.gradle.kts | head -n 1 | cut -d '"' -f2)
           test -n "$VERSION_NAME" || { echo "::error::Could not read app version"; exit 1; }
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
       - name: Publish update release

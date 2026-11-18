@@ -135,6 +135,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showLibrary() {
+        root.removeCallbacks(progressTask)
         root.removeAllViews()
         root.setBackgroundColor(bg)
         val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false; fillViewport = true }

@@ -637,45 +637,57 @@ class MainActivity : ComponentActivity() {
         playerTopControls = top
 
         // Hybrid playback controls: prominent center play with precise skip controls
+        val compactControls = landscape
         val center = LinearLayout(this).apply {
             gravity = Gravity.CENTER
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setPadding(dp(if (compactControls) 6 else 12), dp(if (compactControls) 5 else 8),
+                dp(if (compactControls) 6 else 12), dp(if (compactControls) 5 else 8))
             background = shape(Color.argb(105, 3, 10, 20), 34, Color.argb(70, 190, 215, 245))
         }
-        center.addView(action("Previous", false) { previous() }.apply {
-            textSize = 11f
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+        center.addView(action(if (compactControls) "⏮" else "Previous", false) { previous() }.apply {
+            textSize = if (compactControls) 17f else 11f
+            setPadding(dp(if (compactControls) 8 else 12), dp(if (compactControls) 9 else 12),
+                dp(if (compactControls) 8 else 12), dp(if (compactControls) 9 else 12))
         })
-        center.addView(Space(this), LinearLayout.LayoutParams(dp(7), 1))
-        center.addView(action("↶ 10", false) { seekBy(-10000) }.apply {
-            textSize = 12f
-            setPadding(dp(12), dp(13), dp(12), dp(13))
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(if (compactControls) 3 else 7), 1))
+        center.addView(action(if (compactControls) "↶10" else "↶ 10", false) { seekBy(-10000) }.apply {
+            textSize = if (compactControls) 11f else 12f
+            setPadding(dp(if (compactControls) 8 else 12), dp(11), dp(if (compactControls) 8 else 12), dp(11))
         })
-        center.addView(Space(this), LinearLayout.LayoutParams(dp(9), 1))
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(if (compactControls) 4 else 9), 1))
         playView = action("▶", true) { toggle() }.apply {
-            textSize = 22f
-            setPadding(dp(22), dp(17), dp(22), dp(17))
+            textSize = if (compactControls) 19f else 22f
+            setPadding(dp(if (compactControls) 16 else 22), dp(if (compactControls) 12 else 17),
+                dp(if (compactControls) 16 else 22), dp(if (compactControls) 12 else 17))
             background = shape(blue, 32)
         }
         center.addView(playView)
-        center.addView(Space(this), LinearLayout.LayoutParams(dp(9), 1))
-        center.addView(action("10 ↷", false) { seekBy(10000) }.apply {
-            textSize = 12f
-            setPadding(dp(12), dp(13), dp(12), dp(13))
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(if (compactControls) 4 else 9), 1))
+        center.addView(action(if (compactControls) "10↷" else "10 ↷", false) { seekBy(10000) }.apply {
+            textSize = if (compactControls) 11f else 12f
+            setPadding(dp(if (compactControls) 8 else 12), dp(11), dp(if (compactControls) 8 else 12), dp(11))
         })
-        center.addView(Space(this), LinearLayout.LayoutParams(dp(7), 1))
-        center.addView(action("Next", false) { next() }.apply {
-            textSize = 11f
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(if (compactControls) 3 else 7), 1))
+        center.addView(action(if (compactControls) "⏭" else "Next", false) { next() }.apply {
+            textSize = if (compactControls) 17f else 11f
+            setPadding(dp(if (compactControls) 8 else 12), dp(if (compactControls) 9 else 12),
+                dp(if (compactControls) 8 else 12), dp(if (compactControls) 9 else 12))
         })
-        frame.addView(center, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        val centerParams = FrameLayout.LayoutParams(-2, -2, Gravity.CENTER).apply {
+            if (compactControls) {
+                leftMargin = dp(8)
+                rightMargin = dp(8)
+            }
+        }
+        frame.addView(center, centerParams)
         playerCenterControls = center
 
         // Bottom timeline and secondary tools
         val bottom = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(if (wide) 24 else 16), dp(13), dp(if (wide) 24 else 16), dp(if (landscape) 9 else 15))
+            setPadding(dp(if (wide) 18 else 16), dp(if (landscape) 5 else 13),
+                dp(if (wide) 18 else 16), dp(if (landscape) 4 else 15))
             background = GradientDrawable(
                 GradientDrawable.Orientation.BOTTOM_TOP,
                 intArrayOf(Color.argb(238, 3, 9, 18), Color.argb(150, 3, 9, 18), Color.TRANSPARENT)
@@ -696,7 +708,7 @@ class MainActivity : ComponentActivity() {
                 }
             })
         }
-        bottom.addView(seek, LinearLayout.LayoutParams(-1, dp(30)))
+        bottom.addView(seek, LinearLayout.LayoutParams(-1, dp(if (landscape) 23 else 30)))
         val info = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         timeView = txt("00:00 / 00:00", 11f, Color.rgb(207, 220, 237), true)
         info.addView(timeView, LinearLayout.LayoutParams(0, dp(28), 1f))
@@ -722,8 +734,8 @@ class MainActivity : ComponentActivity() {
             })
         }
         toolScroll.addView(tools)
-        bottom.addView(toolScroll, LinearLayout.LayoutParams(-1, dp(40)).apply {
-            topMargin = dp(5)
+        bottom.addView(toolScroll, LinearLayout.LayoutParams(-1, dp(if (landscape) 32 else 40)).apply {
+            topMargin = dp(if (landscape) 1 else 5)
         })
         frame.addView(bottom, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
         playerBottomControls = bottom

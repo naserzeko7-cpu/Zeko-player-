@@ -2,6 +2,12 @@ plugins {
     id("com.android.application") version "8.5.2"
     id("org.jetbrains.kotlin.android") version "1.9.24"
 }
+
+val zekoKeystorePath = System.getenv("ZEKO_KEYSTORE_PATH")
+    ?.takeIf { it.isNotBlank() && file(it).exists() }
+val zekoKeystorePassword = System.getenv("ZEKO_KEYSTORE_PASSWORD")
+    ?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "com.zeko.player"
     compileSdk = 34
@@ -9,8 +15,25 @@ android {
         applicationId = "com.zeko.player"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = 3
+        versionName = "2.0.1"
+    }
+    signingConfigs {
+        create("zekoStable") {
+            if (zekoKeystorePath != null && zekoKeystorePassword != null) {
+                storeFile = file(zekoKeystorePath)
+                storePassword = zekoKeystorePassword
+                keyAlias = "zeko-player"
+                keyPassword = zekoKeystorePassword
+            }
+        }
+    }
+    buildTypes {
+        getByName("debug") {
+            if (zekoKeystorePath != null && zekoKeystorePassword != null) {
+                signingConfig = signingConfigs.getByName("zekoStable")
+            }
+        }
     }
     sourceSets.getByName("main") {
         manifest.srcFile("AndroidManifest.xml")

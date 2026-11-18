@@ -1,22 +1,28 @@
 package com.zeko.player
 
+import android.Manifest
 import android.app.PictureInPictureParams
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.util.Rational
+import android.util.Size
 import android.view.Gravity
-import android.view.GestureDetector
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.*
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -24,325 +30,344 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import java.util.Locale
 
-class MainActivity : ComponentActivity() {
-    private var exo: ExoPlayer? = null
-    private lateinit var page: LinearLayout
-    private lateinit var screen: FrameLayout
-    private lateinit var videoView: PlayerView
-    private lateinit var controls: LinearLayout
-    private lateinit var play: Button
-    private lateinit var seek: SeekBar
-    private lateinit var clock: TextView
-    private lateinit var name: TextView
-    private var dragging = false
-    private val queue = mutableListOf<Uri>()
-    private var shuffleButton: Button? = null
+private data class VideoFile(val id: Long, val uri: Uri, val title: String, val duration: Long, val size: Long)
 
+class MainActivity : ComponentActivity() {
+    private val blue = Color.rgb(42, 139, 255)
+    private val bg = Color.rgb(9, 16, 29)
+    private val panel = Color.rgb(19, 32, 51)
+    private val muted = Color.rgb(151, 169, 192)
+    private val videos = mutableListOf<VideoFile>()
+    private val queue = mutableListOf<VideoFile>()
+    private var exo: ExoPlayer? = null
+    private lateinit var root: FrameLayout
+    private lateinit var playerView: PlayerView
+    private lateinit var titleView: TextView
+    private lateinit var playView: TextView
+    private lateinit var seek: SeekBar
+    private lateinit var timeView: TextView
+    private var dragging = false
+    private var filter = "All videos"
+    private var query = ""
+
+    private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) loadVideos() else permissionScreen()
+    }
     private val picker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) {
             queue.clear()
             uris.forEach { uri ->
                 try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-                queue.add(uri)
+                queue.add(VideoFile(0, uri, uri.lastPathSegment ?: "Video", 0, 0))
             }
-            playQueue(0)
+            playAt(0)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.statusBarColor = Color.rgb(12, 14, 19)
-        window.navigationBarColor = Color.rgb(12, 14, 19)
-        buildInterface()
-        intent?.data?.let { openVideo(it) }
+        window.statusBarColor = bg
+        window.navigationBarColor = bg
+        root = FrameLayout(this)
+        setContentView(root)
+        if (hasVideoPermission()) loadVideos() else askPermission()
+        intent?.data?.let { uri ->
+            queue.clear()
+            queue.add(VideoFile(0, uri, uri.lastPathSegment ?: "Video", 0, 0))
+            playAt(0)
+        }
     }
 
-    private fun d(n: Int) = (n * resources.displayMetrics.density).toInt()
-    private fun label(s: String, size: Float, color: Int = Color.WHITE) = TextView(this).apply {
-        text = s; textSize = size; setTextColor(color); gravity = Gravity.CENTER_VERTICAL
+    private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
+    private fun hasVideoPermission(): Boolean {
+        val p = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_VIDEO else Manifest.permission.READ_EXTERNAL_STORAGE
+        return ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
     }
-    private fun action(s: String, run: () -> Unit) = Button(this).apply {
-        text = s; isAllCaps = false; textSize = 12f; setTextColor(Color.WHITE)
-        minHeight = d(42); minimumHeight = d(42); minWidth = d(48); minimumWidth = d(48)
-        setPadding(d(12), 0, d(12), 0)
-        background = android.graphics.drawable.GradientDrawable().apply {
-            setColor(Color.rgb(39, 45, 57))
-            cornerRadius = d(13).toFloat()
-            setStroke(d(1), Color.rgb(58, 65, 79))
-        }
-        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, d(44)).apply {
-            marginEnd = d(6)
-        }
-        setOnClickListener { run() }
+    private fun askPermission() {
+        val p = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_VIDEO else Manifest.permission.READ_EXTERNAL_STORAGE
+        permission.launch(p)
+    }
+    private fun shape(color: Int, radius: Int, stroke: Int = Color.TRANSPARENT) = GradientDrawable().apply {
+        setColor(color); cornerRadius = dp(radius).toFloat()
+        if (stroke != Color.TRANSPARENT) setStroke(dp(1), stroke)
+    }
+    private fun txt(value: String, size: Float, color: Int = Color.WHITE, bold: Boolean = false) = TextView(this).apply {
+        text = value; textSize = size; setTextColor(color); gravity = Gravity.CENTER_VERTICAL
+        includeFontPadding = false
+        if (bold) setTypeface(typeface, Typeface.BOLD)
+    }
+    private fun action(value: String, primary: Boolean = false, click: () -> Unit) = TextView(this).apply {
+        text = value; textSize = 13f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
+        setPadding(dp(15), dp(10), dp(15), dp(10))
+        background = shape(if (primary) blue else Color.rgb(28, 45, 68), 24, if (primary) blue else Color.rgb(54, 78, 109))
+        isClickable = true; isFocusable = true; setOnClickListener { click() }
     }
 
-    private fun buildInterface() {
-        page = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(d(14), d(8), d(14), d(10))
-            setBackgroundColor(Color.rgb(12, 14, 19))
-        }
-        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        top.addView(label("ZEKO PLAYER", 21f).apply { setTypeface(null, 1); letterSpacing = .12f },
-            LinearLayout.LayoutParams(0, d(54), 1f))
-        top.addView(action("＋  Open video") { picker.launch(arrayOf("video/*")) })
-        page.addView(top)
-        page.addView(label("A cleaner way to watch.", 13f, Color.rgb(145, 154, 170)).apply {
-            setPadding(0, 0, 0, d(12))
-        })
-        screen = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        videoView = PlayerView(this).apply {
-            useController = false
-            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-            setShutterBackgroundColor(Color.BLACK)
-            setKeepContentOnPlayerReset(true)
-        }
-        screen.addView(videoView, FrameLayout.LayoutParams(-1, -1))
-        val empty = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setBackgroundColor(Color.rgb(18, 21, 28))
-            addView(label("▶", 46f, Color.rgb(255, 126, 54)).apply { gravity = Gravity.CENTER })
-            addView(label("Choose a video to begin", 15f, Color.LTGRAY).apply { gravity = Gravity.CENTER })
-            addView(label("MP4  ·  MKV  ·  MOV  ·  WEBM", 11f, Color.GRAY).apply { gravity = Gravity.CENTER })
-        }
-        screen.addView(empty, FrameLayout.LayoutParams(-1, -1))
-        val gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(e: MotionEvent): Boolean = true
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                val visible = controls.visibility == View.VISIBLE
-                controls.visibility = if (visible) View.GONE else View.VISIBLE
-                name.visibility = if (visible) View.GONE else View.VISIBLE
-                return true
+    private fun loadVideos() {
+        videos.clear()
+        val base = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        val columns = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DISPLAY_NAME,
+            MediaStore.Video.Media.DURATION, MediaStore.Video.Media.SIZE)
+        try {
+            contentResolver.query(base, columns, null, null, MediaStore.Video.Media.DATE_ADDED + " DESC")?.use { c ->
+                val id = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                val name = c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+                val duration = c.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+                val size = c.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                while (c.moveToNext()) {
+                    val key = c.getLong(id)
+                    videos.add(VideoFile(key, Uri.withAppendedPath(base, key.toString()),
+                        c.getString(name) ?: "Untitled video", c.getLong(duration), c.getLong(size)))
+                }
             }
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                val p = exo ?: return true
-                val forward = e.x >= screen.width / 2f
-                val target = if (forward) p.currentPosition + 10_000L else p.currentPosition - 10_000L
-                p.seekTo(target.coerceIn(0L, p.duration.coerceAtLeast(0L)))
-                Toast.makeText(this@MainActivity, if (forward) "+10 seconds" else "−10 seconds", Toast.LENGTH_SHORT).show()
-                return true
-            }
-        })
-        videoView.setOnTouchListener { _, event -> gestures.onTouchEvent(event); true }
-        page.addView(screen, LinearLayout.LayoutParams(-1, 0, 1f))
-        name = label("Nothing playing", 14f, Color.LTGRAY).apply { setPadding(0, d(12), 0, d(6)) }
-        page.addView(name)
-        controls = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(d(10), d(10), d(10), d(10))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.rgb(20, 23, 30))
-                cornerRadius = d(18).toFloat()
-                setStroke(d(1), Color.rgb(42, 48, 60))
-            }
+        } catch (_: Exception) {}
+        showLibrary()
+    }
+
+    private fun permissionScreen() {
+        root.removeAllViews()
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(28), dp(28), dp(28), dp(28)); setBackgroundColor(bg) }
+        box.addView(txt("ZEKO PLAYER", 26f, Color.WHITE, true).apply { gravity = Gravity.CENTER })
+        box.addView(txt("Allow video access to build your personal library.", 14f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(12), 0, dp(20)) })
+        box.addView(action("Allow access", true) { askPermission() })
+        root.addView(box, FrameLayout.LayoutParams(-1, -1))
+    }
+
+    private fun showLibrary() {
+        root.removeAllViews()
+        root.setBackgroundColor(bg)
+        val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false; fillViewport = true }
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(20), dp(22), dp(30)) }
+        scroll.addView(body); root.addView(scroll)
+
+        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val logo = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        logo.addView(txt("zeko", 29f, Color.WHITE, true))
+        logo.addView(txt("YOUR VIDEO SPACE", 9f, muted, true).apply { letterSpacing = .18f })
+        header.addView(logo, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(action("⌕", false) { searchDialog() })
+        header.addView(Space(this), LinearLayout.LayoutParams(dp(8), 1))
+        header.addView(action("＋  Add videos", true) { picker.launch(arrayOf("video/*")) })
+        body.addView(header)
+        body.addView(txt("A home for everything you watch.", 13f, muted).apply { setPadding(0, dp(7), 0, dp(20)) })
+
+        val first = videos.firstOrNull()
+        val hero = FrameLayout(this).apply { background = shape(panel, 24, Color.rgb(44, 69, 101)); clipToOutline = true }
+        if (first != null) thumbnail(first, 800, 500)?.let { bmp ->
+            hero.addView(ImageView(this).apply { setImageBitmap(bmp); scaleType = ImageView.ScaleType.CENTER_CROP; alpha = .72f }, FrameLayout.LayoutParams(-1, -1))
         }
+        hero.addView(View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(7, 14, 26), Color.argb(185, 7, 14, 26), Color.argb(20, 7, 14, 26)))
+        }, FrameLayout.LayoutParams(-1, -1))
+        val heroText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(22), dp(22), dp(22), dp(22)) }
+        heroText.addView(txt(if (first == null) "WELCOME TO YOUR LIBRARY" else "RECENTLY ADDED", 10f, Color.rgb(112, 183, 255), true))
+        heroText.addView(txt(first?.title ?: "Your videos,\none beautiful space.", 23f, Color.WHITE, true).apply { maxLines = 2; setPadding(0, dp(9), 0, dp(7)) })
+        heroText.addView(txt(if (first == null) "Your device videos will appear here." else durationText(first.duration) + "  •  " + fileSize(first.size), 12f, Color.rgb(218, 229, 243)))
+        val heroButtons = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(16), 0, 0) }
+        heroButtons.addView(action("▶  Play now", true) { if (first != null) playVideo(first) else picker.launch(arrayOf("video/*")) })
+        heroButtons.addView(Space(this), LinearLayout.LayoutParams(dp(10), 1))
+        heroButtons.addView(action("Browse library") { scroll.smoothScrollTo(0, dp(500)) })
+        heroText.addView(heroButtons)
+        hero.addView(heroText, FrameLayout.LayoutParams(-1, -1))
+        body.addView(hero, LinearLayout.LayoutParams(-1, dp(248)).apply { bottomMargin = dp(22) })
+
+        val chipScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("All videos", "Recently added", "Long videos", "Short clips").forEach { item ->
+            chips.addView(action(item, filter == item) { filter = item; showLibrary() },
+                LinearLayout.LayoutParams(-2, dp(43)).apply { marginEnd = dp(9) })
+        }
+        chipScroll.addView(chips); body.addView(chipScroll, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(22) })
+
+        val items = filteredVideos()
+        addRail(body, "Recently added", "Your latest videos", items.take(12))
+        addRail(body, "Your collection", items.size.toString() + " videos on this device", items)
+        if (videos.isEmpty()) {
+            val empty = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(20), dp(30), dp(20), dp(30)); background = shape(panel, 20) }
+            empty.addView(txt("No videos found yet", 18f, Color.WHITE, true).apply { gravity = Gravity.CENTER })
+            empty.addView(txt("Select videos or check your device permissions.", 13f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(16)) })
+            empty.addView(action("＋  Select videos", true) { picker.launch(arrayOf("video/*")) })
+            body.addView(empty)
+        }
+    }
+
+    private fun filteredVideos(): List<VideoFile> {
+        var result = videos.toList()
+        if (query.isNotBlank()) result = result.filter { it.title.contains(query, true) }
+        return when (filter) {
+            "Long videos" -> result.filter { it.duration >= 20 * 60 * 1000L }
+            "Short clips" -> result.filter { it.duration < 5 * 60 * 1000L }
+            else -> result
+        }
+    }
+    private fun searchDialog() {
+        val field = EditText(this).apply { hint = "Search your videos"; setHintTextColor(muted); setTextColor(Color.WHITE); setSingleLine(true); setPadding(dp(14), dp(10), dp(14), dp(10)); background = shape(panel, 14); setText(query) }
+        android.app.AlertDialog.Builder(this).setTitle("Search library").setView(field)
+            .setPositiveButton("Search") { _, _ -> query = field.text.toString(); showLibrary() }
+            .setNegativeButton("Clear") { _, _ -> query = ""; showLibrary() }.show()
+    }
+
+    private fun addRail(parent: LinearLayout, heading: String, sub: String, items: List<VideoFile>) {
+        val title = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        title.addView(txt(heading, 20f, Color.WHITE, true))
+        title.addView(txt(sub, 11f, muted).apply { setPadding(0, dp(4), 0, dp(12)) })
+        parent.addView(title)
+        if (items.isEmpty()) {
+            parent.addView(txt("Nothing to show here yet.", 13f, muted).apply { setPadding(0, 0, 0, dp(20)) })
+            return
+        }
+        val horizontal = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; clipToPadding = false }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        items.forEach { row.addView(poster(it)) }
+        horizontal.addView(row)
+        parent.addView(horizontal, LinearLayout.LayoutParams(-1, dp(258)).apply { bottomMargin = dp(24) })
+    }
+
+    private fun poster(video: VideoFile): View {
+        val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; isClickable = true; isFocusable = true; setOnClickListener { playVideo(video) } }
+        val art = FrameLayout(this).apply { background = shape(Color.rgb(25, 41, 62), 15, Color.rgb(49, 70, 97)); clipToOutline = true }
+        thumbnail(video, 320, 440)?.let { bmp ->
+            art.addView(ImageView(this).apply { setImageBitmap(bmp); scaleType = ImageView.ScaleType.CENTER_CROP }, FrameLayout.LayoutParams(-1, -1))
+        }
+        art.addView(View(this).apply { background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.TRANSPARENT, Color.argb(175, 3, 8, 16))) }, FrameLayout.LayoutParams(-1, -1))
+        art.addView(txt("▶", 18f, Color.WHITE, true).apply { gravity = Gravity.CENTER; background = shape(Color.argb(185, 9, 27, 49), 30, Color.argb(180, 125, 185, 255)) },
+            FrameLayout.LayoutParams(dp(43), dp(43), Gravity.CENTER))
+        art.addView(txt(durationText(video.duration), 10f, Color.WHITE, true).apply { setPadding(dp(8), dp(5), dp(8), dp(5)); background = shape(Color.argb(190, 4, 10, 18), 8) },
+            FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(8), dp(8)) })
+        card.addView(art, LinearLayout.LayoutParams(dp(142), dp(184)))
+        card.addView(txt(video.title, 12f, Color.WHITE, true).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(dp(2), dp(9), dp(2), dp(3)) }, LinearLayout.LayoutParams(dp(142), dp(38)))
+        card.addView(txt(fileSize(video.size), 10f, muted).apply { setPadding(dp(2), 0, 0, 0) })
+        card.layoutParams = LinearLayout.LayoutParams(dp(142), -2).apply { marginEnd = dp(13) }
+        return card
+    }
+
+    private fun thumbnail(video: VideoFile, w: Int, h: Int): Bitmap? = try {
+        if (Build.VERSION.SDK_INT >= 29) contentResolver.loadThumbnail(video.uri, Size(w, h), null)
+        else MediaStore.Video.Thumbnails.getThumbnail(contentResolver, video.id, MediaStore.Video.Thumbnails.MINI_KIND, null)
+    } catch (_: Exception) { null }
+
+    private fun durationText(ms: Long): String {
+        val sec = (ms / 1000).coerceAtLeast(0); val hours = sec / 3600; val mins = (sec % 3600) / 60; val seconds = sec % 60
+        return if (hours > 0) String.format(Locale.US, "%d:%02d:%02d", hours, mins, seconds) else String.format(Locale.US, "%02d:%02d", mins, seconds)
+    }
+    private fun fileSize(bytes: Long): String {
+        if (bytes <= 0) return "Local video"
+        val mb = bytes / (1024.0 * 1024.0)
+        return if (mb >= 1024) String.format(Locale.US, "%.1f GB", mb / 1024) else String.format(Locale.US, "%.0f MB", mb)
+    }
+
+    private fun playVideo(video: VideoFile) {
+        queue.clear(); queue.addAll(videos)
+        playAt(queue.indexOfFirst { it.uri == video.uri }.coerceAtLeast(0))
+    }
+    private fun playAt(index: Int) {
+        if (queue.isEmpty()) return
+        if (exo == null) exo = ExoPlayer.Builder(this).build()
+        showPlayer()
+        playerView.player = exo
+        exo?.setMediaItems(queue.map { MediaItem.fromUri(it.uri) }, index.coerceIn(0, queue.lastIndex), 0L)
+        exo?.prepare(); exo?.play(); updatePlayer()
+        root.removeCallbacks(progressTask); root.post(progressTask)
+    }
+    private fun showPlayer() {
+        root.removeAllViews()
+        val frame = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        playerView = PlayerView(this).apply { useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT; setShutterBackgroundColor(Color.BLACK); setKeepContentOnPlayerReset(true) }
+        frame.addView(playerView, FrameLayout.LayoutParams(-1, -1))
+        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(15), dp(12), dp(15), dp(12)); background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.argb(220, 3, 9, 18), Color.TRANSPARENT)) }
+        top.addView(action("‹") { exo?.pause(); showLibrary() })
+        titleView = txt("Now playing", 14f, Color.WHITE, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE; setPadding(dp(12), 0, 0, 0) }
+        top.addView(titleView, LinearLayout.LayoutParams(0, dp(46), 1f))
+        top.addView(action("CC") { chooseTracks() })
+        frame.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+
+        val bottom = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(17), dp(14), dp(17), dp(17)); background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(Color.argb(240, 3, 9, 18), Color.TRANSPARENT)) }
         seek = SeekBar(this).apply {
-            max = 1000
-            progressTintList = android.content.res.ColorStateList.valueOf(Color.rgb(255, 126, 54))
-            thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            max = 1000; progressTintList = android.content.res.ColorStateList.valueOf(blue); thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onStartTrackingTouch(b: SeekBar) { dragging = true }
-                override fun onProgressChanged(b: SeekBar, v: Int, user: Boolean) {}
-                override fun onStopTrackingTouch(b: SeekBar) {
-                    val p = exo
-                    if (p != null && p.duration > 0) p.seekTo(p.duration * b.progress / 1000L)
-                    dragging = false
-                }
+                override fun onStartTrackingTouch(s: SeekBar) { dragging = true }
+                override fun onProgressChanged(s: SeekBar, p: Int, user: Boolean) {}
+                override fun onStopTrackingTouch(s: SeekBar) { val p = exo; if (p != null && p.duration > 0) p.seekTo(p.duration * s.progress / 1000L); dragging = false }
             })
         }
-        controls.addView(seek, LinearLayout.LayoutParams(-1, d(34)))
-        val mainRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        clock = label("00:00 / 00:00", 11f, Color.LTGRAY)
-        mainRow.addView(clock, LinearLayout.LayoutParams(0, d(46), 1f))
-        mainRow.addView(action("Prev") { previous() })
-        mainRow.addView(action("−10") { exo?.let { it.seekTo((it.currentPosition - 10000).coerceAtLeast(0)) } })
-        play = action("▶") { toggle() }
-        mainRow.addView(play)
-        mainRow.addView(action("+10") { exo?.let { it.seekTo((it.currentPosition + 10000).coerceAtMost(it.duration.coerceAtLeast(0))) } })
-        mainRow.addView(action("Next") { next() })
-        mainRow.addView(action("PiP") { pip() })
-        controls.addView(mainRow)
-        val more = LinearLayout(this).apply { gravity = Gravity.CENTER }
-        lateinit var repeatButton: Button
-        repeatButton = action("Repeat: Off") { repeat(repeatButton) }
-        more.addView(repeatButton)
-        lateinit var speedButton: Button
-        speedButton = action("1.0×") { speed(speedButton) }
-        more.addView(speedButton)
-        val shuffle = action("Shuffle: Off") {
-            val p = exo ?: return@action
-            p.shuffleModeEnabled = !p.shuffleModeEnabled
-            shuffleButton?.text = if (p.shuffleModeEnabled) "Shuffle: On" else "Shuffle: Off"
-        }
-        shuffleButton = shuffle
-        more.addView(shuffle)
-        lateinit var fitButton: Button
-        fitButton = action("Fit") {
-            videoView.resizeMode = when (videoView.resizeMode) {
-                AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-            }
-            fitButton.text = when (videoView.resizeMode) {
-                AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Crop"
-                AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"
-                else -> "Fit"
-            }
-        }
-        more.addView(fitButton)
-        more.addView(action("Rotate") { toggleOrientation() })
-        more.addView(action("Audio / Subs") { tracks() })
-        controls.addView(more)
-        page.addView(controls, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
-        setContentView(page)
+        bottom.addView(seek, LinearLayout.LayoutParams(-1, dp(32)))
+        val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        timeView = txt("00:00 / 00:00", 11f, muted)
+        row.addView(timeView, LinearLayout.LayoutParams(0, dp(46), 1f))
+        row.addView(action("↶ 10") { seekBy(-10000) }); row.addView(Space(this), LinearLayout.LayoutParams(dp(6), 1))
+        playView = action("▶", true) { toggle() }; row.addView(playView)
+        row.addView(Space(this), LinearLayout.LayoutParams(dp(6), 1)); row.addView(action("10 ↷") { seekBy(10000) })
+        row.addView(Space(this), LinearLayout.LayoutParams(dp(6), 1)); row.addView(action("Next") { next() })
+        bottom.addView(row)
+        val tools = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, dp(9), 0, 0) }
+        tools.addView(action("Queue") { showQueue() }); tools.addView(Space(this), LinearLayout.LayoutParams(dp(7), 1))
+        tools.addView(action("Speed") { cycleSpeed() }); tools.addView(Space(this), LinearLayout.LayoutParams(dp(7), 1))
+        tools.addView(action("Fit") { cycleResize() }); tools.addView(Space(this), LinearLayout.LayoutParams(dp(7), 1))
+        tools.addView(action("PiP") { enterPip() })
+        bottom.addView(tools)
+        frame.addView(bottom, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        root.addView(frame)
+        exo?.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) { if (::playView.isInitialized) playView.text = if (isPlaying) "Ⅱ" else "▶" }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) { updatePlayer() }
+        })
     }
-
-    private fun openVideo(uri: Uri) {
-        queue.clear()
-        queue.add(uri)
-        playQueue(0)
+    private fun updatePlayer() {
+        val item = exo?.currentMediaItem
+        titleView.text = item?.mediaMetadata?.title ?: item?.localConfiguration?.uri?.lastPathSegment ?: "Now playing"
+        playView.text = if (exo?.isPlaying == true) "Ⅱ" else "▶"
     }
-
-    private fun playQueue(index: Int) {
-        if (exo == null) {
-            exo = ExoPlayer.Builder(this).build()
-            videoView.player = exo
-            exo?.addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(value: Boolean) { play.text = if (value) "Ⅱ" else "▶" }
-                override fun onMediaMetadataChanged(metadata: androidx.media3.common.MediaMetadata) {
-                    name.text = metadata.title ?: "Now playing"
-                }
-                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                    name.text = mediaItem?.mediaMetadata?.title
-                        ?: mediaItem?.localConfiguration?.uri?.lastPathSegment
-                        ?: "Now playing"
-                }
-            })
-        }
-        exo?.setMediaItems(queue.map { MediaItem.fromUri(it) }, index, 0L)
-        exo?.prepare()
-        exo?.play()
-        val uri = queue.getOrNull(index)
-        name.text = uri?.lastPathSegment?.substringAfterLast('/') ?: "Now playing"
-        play.text = "Ⅱ"
-        screen.getChildAt(1).visibility = View.GONE
-        page.removeCallbacks(progressTask)
-        page.post(progressTask)
-    }
-
     private val progressTask = object : Runnable {
         override fun run() {
             val p = exo ?: return
-            val duration = p.duration.coerceAtLeast(0)
-            if (!dragging && duration > 0) seek.progress = (p.currentPosition * 1000L / duration).toInt()
-            clock.text = fmt(p.currentPosition) + " / " + fmt(duration)
-            page.postDelayed(this, 500)
+            if (!::seek.isInitialized || root.childCount == 0) return
+            val d = p.duration.coerceAtLeast(0)
+            if (!dragging && d > 0) seek.progress = (p.currentPosition * 1000L / d).toInt()
+            timeView.text = durationText(p.currentPosition) + " / " + durationText(d)
+            root.postDelayed(this, 500)
         }
     }
-    private fun fmt(ms: Long): String {
-        val s = (ms / 1000).coerceAtLeast(0)
-        return String.format(Locale.US, "%02d:%02d", s / 60, s % 60)
+    private fun toggle() { val p = exo ?: return; if (p.isPlaying) p.pause() else p.play(); playView.text = if (p.isPlaying) "Ⅱ" else "▶" }
+    private fun seekBy(delta: Long) { val p = exo ?: return; p.seekTo((p.currentPosition + delta).coerceIn(0L, p.duration.coerceAtLeast(0))) }
+    private fun next() { val p = exo ?: return; if (p.hasNextMediaItem()) p.seekToNextMediaItem() else if (queue.isNotEmpty()) p.seekTo(0, 0L) }
+    private fun showQueue() {
+        android.app.AlertDialog.Builder(this).setTitle("Up next").setItems(queue.map { it.title }.toTypedArray()) { _, i -> exo?.seekTo(i, 0L); exo?.play() }.setNegativeButton("Close", null).show()
     }
-    private fun next() {
+    private fun cycleSpeed() {
         val p = exo ?: return
-        if (p.hasNextMediaItem()) p.seekToNextMediaItem()
-        else if (p.repeatMode == Player.REPEAT_MODE_ALL && queue.isNotEmpty()) p.seekTo(0, 0L)
+        val speed = when { p.playbackParameters.speed < 1.2f -> 1.25f; p.playbackParameters.speed < 1.4f -> 1.5f; p.playbackParameters.speed < 1.8f -> 2f; else -> 1f }
+        p.setPlaybackSpeed(speed); Toast.makeText(this, "$speed×", Toast.LENGTH_SHORT).show()
     }
-    private fun previous() {
-        val p = exo ?: return
-        if (p.currentPosition > 3000) p.seekTo(0)
-        else if (p.hasPreviousMediaItem()) p.seekToPreviousMediaItem()
-        else p.seekTo(0)
-    }
-    private fun toggle() {
-        val p = exo
-        if (p == null) { picker.launch(arrayOf("video/*")); return }
-        if (p.isPlaying) p.pause() else p.play()
-        play.text = if (p.isPlaying) "Ⅱ" else "▶"
-    }
-    private fun repeat(b: Button) {
-        val p = exo ?: return
-        p.repeatMode = when (p.repeatMode) {
-            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ONE
-            Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ALL
-            else -> Player.REPEAT_MODE_OFF
-        }
-        b.text = when (p.repeatMode) {
-            Player.REPEAT_MODE_ONE -> "Repeat: One"
-            Player.REPEAT_MODE_ALL -> "Repeat: All"
-            else -> "Repeat: Off"
+    private fun cycleResize() {
+        playerView.resizeMode = when (playerView.resizeMode) {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+            else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
         }
     }
-    private fun speed(b: Button) {
-        val p = exo ?: return
-        val next = when {
-            p.playbackParameters.speed < 1.25f -> 1.5f
-            p.playbackParameters.speed < 1.75f -> 2f
-            p.playbackParameters.speed >= 2f -> .75f
-            else -> 1f
+    private fun chooseTracks() {
+        val p = exo ?: return; val groups = p.currentTracks.groups
+        val names = mutableListOf<String>(); val refs = mutableListOf<Pair<Int, Int>>()
+        groups.forEachIndexed { gi, group ->
+            if (group.type == androidx.media3.common.C.TRACK_TYPE_AUDIO || group.type == androidx.media3.common.C.TRACK_TYPE_TEXT)
+                for (ti in 0 until group.length) { names.add((if (group.type == androidx.media3.common.C.TRACK_TYPE_AUDIO) "Audio" else "Subtitle") + " · " + (group.getTrackFormat(ti).language ?: "Unknown")); refs.add(gi to ti) }
         }
-        p.setPlaybackSpeed(next)
-        b.text = next.toString() + "×"
+        android.app.AlertDialog.Builder(this).setTitle("Audio and subtitles").setItems(arrayOf("Auto / Default") + names.toTypedArray()) { _, i ->
+            if (i == 0) p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().clearOverrides().build()
+            else { val pair = refs[i - 1]; val g = groups[pair.first]; val override = androidx.media3.common.TrackSelectionOverride(g.mediaTrackGroup, listOf(pair.second)); p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().addOverride(override).build() }
+        }.show()
     }
-    private fun tracks() {
-        val p = exo ?: return
-        val groups = p.currentTracks.groups
-        val options = mutableListOf<String>()
-        val pairs = mutableListOf<Pair<Int, Int>>()
-        groups.forEachIndexed { gi, g ->
-            if (g.type == androidx.media3.common.C.TRACK_TYPE_AUDIO || g.type == androidx.media3.common.C.TRACK_TYPE_TEXT) {
-                for (ti in 0 until g.length) {
-                    val f = g.getTrackFormat(ti)
-                    val kind = if (g.type == androidx.media3.common.C.TRACK_TYPE_AUDIO) "Audio" else "Subtitle"
-                    options.add(kind + " · " + (f.language ?: "Unknown"))
-                    pairs.add(gi to ti)
-                }
-            }
-        }
-        if (options.isEmpty()) {
-            Toast.makeText(this, "No alternate tracks in this video", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val all = arrayOf("Auto / Default") + options.toTypedArray()
-        android.app.AlertDialog.Builder(this).setTitle("Audio and subtitles")
-            .setItems(all) { _, index ->
-                if (index == 0) p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().clearOverrides().build()
-                else {
-                    val pair = pairs[index - 1]
-                    val g = groups[pair.first]
-                    val override = androidx.media3.common.TrackSelectionOverride(g.mediaTrackGroup, listOf(pair.second))
-                    p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().addOverride(override).build()
-                }
-            }.show()
+    private fun enterPip() {
+        if (Build.VERSION.SDK_INT >= 26) try { enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()) } catch (_: Exception) {}
     }
-    private fun toggleOrientation() {
-        requestedOrientation = if (requestedOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE) {
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        } else {
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        }
-    }
-    private fun pip() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            try { enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()) }
-            catch (_: Exception) {}
-        }
-    }
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        if (exo?.isPlaying == true) pip()
-    }
+    override fun onUserLeaveHint() { super.onUserLeaveHint(); if (exo?.isPlaying == true && ::playerView.isInitialized) enterPip() }
     override fun onPictureInPictureModeChanged(active: Boolean, config: Configuration) {
         super.onPictureInPictureModeChanged(active, config)
-        controls.visibility = if (active) View.GONE else View.VISIBLE
-        name.visibility = if (active) View.GONE else View.VISIBLE
+        if (active && root.childCount > 0) (root.getChildAt(0) as? FrameLayout)?.let { frame ->
+            for (i in 0 until frame.childCount) if (frame.getChildAt(i) !is PlayerView) frame.getChildAt(i).visibility = View.GONE
+        }
     }
-    override fun onDestroy() {
-        page.removeCallbacks(progressTask)
-        videoView.player = null
-        exo?.release()
-        exo = null
-        super.onDestroy()
-    }
+    override fun onDestroy() { root.removeCallbacks(progressTask); exo?.release(); exo = null; super.onDestroy() }
 }

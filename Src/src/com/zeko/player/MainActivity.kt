@@ -21,6 +21,8 @@ import android.os.Handler
 import android.os.Looper
 import android.util.LruCache
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -62,6 +64,12 @@ class MainActivity : ComponentActivity() {
     private var seekPreviewTime: TextView? = null
     private var previewRequestId = 0
     private var lastPreviewPosition = -1L
+    private var lastPreviewRequestAt = 0L
+    private var previewFuture: Future<*>? = null
+    private val seekPreviewExecutor = Executors.newSingleThreadExecutor()
+    private val seekFrameCache = object : LruCache<String, Bitmap>(8 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
     private var dragging = false
     private var filter = "All videos"
     private var query = ""
@@ -734,6 +742,9 @@ class MainActivity : ComponentActivity() {
                 override fun onStartTrackingTouch(s: SeekBar) {
                     dragging = true
                     lastPreviewPosition = -1L
+                    lastPreviewRequestAt = 0L
+                    previewRequestId++
+                    seekPreviewImage?.setImageDrawable(null)
                     seekPreview?.visibility = View.VISIBLE
                     scheduleControlsHide()
                 }
@@ -749,6 +760,7 @@ class MainActivity : ComponentActivity() {
                     dragging = false
                     seekPreview?.visibility = View.GONE
                     previewRequestId++
+                    previewFuture?.cancel(false)
                 }
             })
         }
@@ -849,11 +861,44 @@ class MainActivity : ComponentActivity() {
         }
     }
     private fun requestSeekPreview(positionMs: Long) {
-        // Keep scrubbing lightweight: decoding video frames while seeking competes
-        // with ExoPlayer's decoder and can cause visible stalls on mid-range devices.
-        if (kotlin.math.abs(positionMs - lastPreviewPosition) < 250L) return
-        lastPreviewPosition = positionMs
+        val mediaUri = exo?.currentMediaItem?.localConfiguration?.uri ?: return
         seekPreviewTime?.text = durationText(positionMs)
+        val now = SystemClock.elapsedRealtime()
+        if (kotlin.math.abs(positionMs - lastPreviewPosition) < 450L && now - lastPreviewRequestAt < 180L) return
+        lastPreviewPosition = positionMs
+        lastPreviewRequestAt = now
+        val bucket = positionMs / 1000L
+        val cacheKey = mediaUri.toString() + "#" + bucket
+        seekFrameCache.get(cacheKey)?.let { cached ->
+            seekPreviewImage?.setImageBitmap(cached)
+            return
+        }
+        val requestId = ++previewRequestId
+        previewFuture?.cancel(false)
+        previewFuture = seekPreviewExecutor.submit {
+            var retriever: MediaMetadataRetriever? = null
+            try {
+                retriever = MediaMetadataRetriever()
+                retriever.setDataSource(this, mediaUri)
+                val frame = if (Build.VERSION.SDK_INT >= 27) {
+                    retriever.getScaledFrameAtTime(positionMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 264, 156)
+                } else {
+                    retriever.getFrameAtTime(positionMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                }
+                if (frame != null) {
+                    seekFrameCache.put(cacheKey, frame)
+                    mainHandler.post {
+                        if (requestId == previewRequestId && dragging && playerVisible) {
+                            seekPreviewImage?.setImageBitmap(frame)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // A frame may be unavailable for some container/codec combinations.
+            } finally {
+                try { retriever?.release() } catch (_: Exception) { }
+            }
+        }
     }
 
     private fun toggle() {
@@ -1035,6 +1080,9 @@ class MainActivity : ComponentActivity() {
         exo?.release()
         exo = null
         thumbnailExecutor.shutdownNow()
+        previewFuture?.cancel(true)
+        seekPreviewExecutor.shutdownNow()
+        seekFrameCache.evictAll()
         thumbnailCache.evictAll()
         super.onDestroy()
     }

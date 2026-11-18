@@ -75,8 +75,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) loadVideos() else permissionScreen()
+    private val permission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        if (grants.values.any { it }) loadVideos() else permissionScreen()
     }
     private val picker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) {
@@ -111,12 +111,22 @@ class MainActivity : ComponentActivity() {
 
     private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
     private fun hasVideoPermission(): Boolean {
+        if (Build.VERSION.SDK_INT >= 34) {
+            return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+        }
         val p = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_VIDEO else Manifest.permission.READ_EXTERNAL_STORAGE
         return ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
     }
     private fun askPermission() {
-        val p = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_VIDEO else Manifest.permission.READ_EXTERNAL_STORAGE
-        permission.launch(p)
+        when {
+            Build.VERSION.SDK_INT >= 34 -> permission.launch(arrayOf(
+                Manifest.permission.READ_MEDIA_VIDEO,
+                Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+            ))
+            Build.VERSION.SDK_INT >= 33 -> permission.launch(arrayOf(Manifest.permission.READ_MEDIA_VIDEO))
+            else -> permission.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
+        }
     }
     private fun shape(color: Int, radius: Int, stroke: Int = Color.TRANSPARENT) = GradientDrawable().apply {
         setColor(color); cornerRadius = dp(radius).toFloat()

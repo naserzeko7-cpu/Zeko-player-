@@ -28,6 +28,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -396,8 +397,8 @@ class MainActivity : ComponentActivity() {
                 else -> 2
             }
             val gap = dp(13)
-            val available = screenWidth - horizontalPad * 2
-            val cardWidth = ((available - gap * (columns - 1)) / columns).coerceAtLeast(dp(130))
+            val availablePx = metrics.widthPixels - dp(horizontalPad * 2)
+            val cardWidth = ((availablePx - gap * (columns - 1)) / columns).coerceAtLeast(dp(130))
             allItems.chunked(columns).forEach { group ->
                 val row = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -523,7 +524,12 @@ class MainActivity : ComponentActivity() {
         if (exo == null) exo = ExoPlayer.Builder(this).build()
         showPlayer()
         playerView.player = exo
-        exo?.setMediaItems(queue.map { MediaItem.fromUri(it.uri) }, index.coerceIn(0, queue.lastIndex), 0L)
+        exo?.setMediaItems(queue.map { video ->
+            MediaItem.Builder()
+                .setUri(video.uri)
+                .setMediaMetadata(MediaMetadata.Builder().setTitle(video.title).build())
+                .build()
+        }, index.coerceIn(0, queue.lastIndex), 0L)
         exo?.prepare(); exo?.play(); updatePlayer()
         root.removeCallbacks(progressTask); root.post(progressTask)
     }
@@ -724,8 +730,14 @@ class MainActivity : ComponentActivity() {
     override fun onUserLeaveHint() { super.onUserLeaveHint(); if (exo?.isPlaying == true && ::playerView.isInitialized) enterPip() }
     override fun onPictureInPictureModeChanged(active: Boolean, config: Configuration) {
         super.onPictureInPictureModeChanged(active, config)
-        if (active && root.childCount > 0) (root.getChildAt(0) as? FrameLayout)?.let { frame ->
-            for (i in 0 until frame.childCount) if (frame.getChildAt(i) !is PlayerView) frame.getChildAt(i).visibility = View.GONE
+        if (active && root.childCount > 0) {
+            (root.getChildAt(0) as? FrameLayout)?.let { frame ->
+                for (i in 0 until frame.childCount) if (frame.getChildAt(i) !is PlayerView) frame.getChildAt(i).visibility = View.GONE
+            }
+        } else if (playerVisible && exo != null && ::root.isInitialized) {
+            showPlayer()
+            playerView.player = exo
+            updatePlayer()
         }
     }
     override fun onConfigurationChanged(newConfig: Configuration) {

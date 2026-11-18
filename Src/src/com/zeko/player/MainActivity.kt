@@ -856,9 +856,12 @@ class MainActivity : ComponentActivity() {
         seekPreviewTime?.text = durationText(positionMs)
         thumbnailExecutor.execute {
             val bitmap = try {
-                MediaMetadataRetriever().use { retriever ->
+                val retriever = MediaMetadataRetriever()
+                try {
                     retriever.setDataSource(this, videoUri)
                     retriever.getFrameAtTime(positionMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                } finally {
+                    retriever.release()
                 }
             } catch (_: Exception) {
                 null

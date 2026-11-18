@@ -745,9 +745,14 @@ class MainActivity : ComponentActivity() {
     private fun seekBy(delta: Long) { val p = exo ?: return; p.seekTo((p.currentPosition + delta).coerceIn(0L, p.duration.coerceAtLeast(0))) }
     private fun previous() {
         val p = exo ?: return
-        if (p.currentPosition > 3000L) p.seekTo(0L)
-        else if (p.hasPreviousMediaItem()) p.seekToPreviousMediaItem()
-        else if (queue.isNotEmpty()) p.seekTo(queue.lastIndex, 0L)
+        if (p.currentPosition > 3000L) {
+            p.seekTo(0L)
+        } else if (p.hasPreviousMediaItem()) {
+            p.seekToPreviousMediaItem()
+        } else {
+            // At the beginning of the queue, restart the current video instead of jumping to the last one.
+            p.seekTo(0L)
+        }
     }
     private fun next() { val p = exo ?: return; if (p.hasNextMediaItem()) p.seekToNextMediaItem() else if (queue.isNotEmpty()) p.seekTo(0, 0L) }
     private fun showQueue() {

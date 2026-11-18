@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (::playView.isInitialized) playView.text = if (isPlaying) "Ⅱ" else "▶"
+            if (isPlaying) scheduleControlsHide() else if (playerVisible) setPlayerControlsVisible(true)
         }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (::titleView.isInitialized && ::playView.isInitialized) updatePlayer()

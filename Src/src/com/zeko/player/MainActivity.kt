@@ -141,7 +141,7 @@ class MainActivity : ComponentActivity() {
 
         val scroll = ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
-            fillViewPort = true
+            isFillViewport = true
             clipToPadding = false
         }
         val body = LinearLayout(this).apply {
@@ -282,7 +282,7 @@ class MainActivity : ComponentActivity() {
         parent.addView(horizontal, LinearLayout.LayoutParams(-1, dp(258)).apply { bottomMargin = dp(24) })
     }
 
-    private fun poster(video: VideoFile, cardWidth: Int): View {
+    private fun poster(video: VideoFile, cardWidth: Int = dp(190)): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             isClickable = true; isFocusable = true

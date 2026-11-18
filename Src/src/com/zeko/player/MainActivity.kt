@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.util.Rational
 import android.util.Size
 import android.os.Handler
@@ -30,6 +31,7 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -68,6 +70,9 @@ class MainActivity : ComponentActivity() {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (::titleView.isInitialized && ::playView.isInitialized) updatePlayer()
         }
+        override fun onPlayerError(error: PlaybackException) {
+            Toast.makeText(this@MainActivity, "Unable to play this video: ${error.errorCodeName}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -78,7 +83,7 @@ class MainActivity : ComponentActivity() {
             queue.clear()
             uris.forEach { uri ->
                 try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-                queue.add(VideoFile(0, uri, uri.lastPathSegment ?: "Video", 0, 0))
+                queue.add(VideoFile(0, uri, displayName(uri), 0, 0))
             }
             playAt(0)
         }
@@ -503,6 +508,16 @@ class MainActivity : ComponentActivity() {
                 if (target.tag == key && bitmap != null) target.setImageBitmap(bitmap)
             }
         }
+    }
+
+    private fun displayName(uri: Uri): String {
+        var name: String? = null
+        try {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) name = cursor.getString(0)
+            }
+        } catch (_: Exception) { }
+        return name?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment?.substringAfterLast('/') ?: "Video"
     }
 
     private fun durationText(ms: Long): String {

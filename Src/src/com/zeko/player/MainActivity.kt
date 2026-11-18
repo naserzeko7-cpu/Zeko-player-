@@ -39,6 +39,7 @@ import java.util.Locale
 
 private data class VideoFile(val id: Long, val uri: Uri, val title: String, val duration: Long, val size: Long)
 
+@androidx.media3.common.util.UnstableApi
 class MainActivity : ComponentActivity() {
     private val blue = Color.rgb(42, 139, 255)
     private val bg = Color.rgb(9, 16, 29)

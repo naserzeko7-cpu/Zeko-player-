@@ -4,7 +4,7 @@ on:
     branches: [ main ]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -33,3 +33,17 @@ jobs:
         with:
           name: Zeko-Player-debug
           path: build/outputs/apk/debug/*.apk
+      - name: Read app version
+        run: |
+          VERSION_NAME=$(sed -n 's/.*versionName = "\\([^"]*\\)".*/\\1/p' build.gradle.kts | head -n 1)
+          test -n "$VERSION_NAME" || { echo "::error::Could not read app version"; exit 1; }
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+      - name: Publish update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION_NAME }}
+          name: Zeko Player ${{ env.VERSION_NAME }}
+          body: "Zeko Player Android update. Install over your existing app; do not uninstall it."
+          files: build/outputs/apk/debug/*.apk
+          overwrite_files: true
+          make_latest: true

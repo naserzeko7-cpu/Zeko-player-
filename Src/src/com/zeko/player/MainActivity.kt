@@ -50,6 +50,15 @@ class MainActivity : ComponentActivity() {
     private var filter = "All videos"
     private var query = ""
 
+    private val playerListener = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (::playView.isInitialized) playView.text = if (isPlaying) "Ⅱ" else "▶"
+        }
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (::titleView.isInitialized && ::playView.isInitialized) updatePlayer()
+        }
+    }
+
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) loadVideos() else permissionScreen()
     }
@@ -136,6 +145,7 @@ class MainActivity : ComponentActivity() {
 
     private fun showLibrary() {
         root.removeCallbacks(progressTask)
+        exo?.removeListener(playerListener)
         root.removeAllViews()
         root.setBackgroundColor(bg)
 
@@ -386,10 +396,8 @@ class MainActivity : ComponentActivity() {
         bottom.addView(tools)
         frame.addView(bottom, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
         root.addView(frame)
-        exo?.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) { if (::playView.isInitialized) playView.text = if (isPlaying) "Ⅱ" else "▶" }
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) { updatePlayer() }
-        })
+        exo?.removeListener(playerListener)
+        exo?.addListener(playerListener)
     }
     private fun updatePlayer() {
         val item = exo?.currentMediaItem
@@ -446,5 +454,11 @@ class MainActivity : ComponentActivity() {
             for (i in 0 until frame.childCount) if (frame.getChildAt(i) !is PlayerView) frame.getChildAt(i).visibility = View.GONE
         }
     }
-    override fun onDestroy() { root.removeCallbacks(progressTask); exo?.release(); exo = null; super.onDestroy() }
+    override fun onDestroy() {
+        root.removeCallbacks(progressTask)
+        exo?.removeListener(playerListener)
+        exo?.release()
+        exo = null
+        super.onDestroy()
+    }
 }

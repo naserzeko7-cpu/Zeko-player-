@@ -844,16 +844,68 @@ class MainActivity : ComponentActivity() {
         }
     }
     private fun chooseTracks() {
-        val p = exo ?: return; val groups = p.currentTracks.groups
-        val names = mutableListOf<String>(); val refs = mutableListOf<Pair<Int, Int>>()
-        groups.forEachIndexed { gi, group ->
-            if (group.type == androidx.media3.common.C.TRACK_TYPE_AUDIO || group.type == androidx.media3.common.C.TRACK_TYPE_TEXT)
-                for (ti in 0 until group.length) { names.add((if (group.type == androidx.media3.common.C.TRACK_TYPE_AUDIO) "Audio" else "Subtitle") + " · " + (group.getTrackFormat(ti).language ?: "Unknown")); refs.add(gi to ti) }
+        val p = exo ?: return
+        val groups = p.currentTracks.groups
+        val audioType = androidx.media3.common.C.TRACK_TYPE_AUDIO
+        val textType = androidx.media3.common.C.TRACK_TYPE_TEXT
+        val entries = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+
+        fun addAction(label: String, action: () -> Unit) {
+            entries.add(label)
+            actions.add(action)
         }
-        android.app.AlertDialog.Builder(this).setTitle("Audio and subtitles").setItems(arrayOf("Auto / Default") + names.toTypedArray()) { _, i ->
-            if (i == 0) p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().clearOverrides().build()
-            else { val pair = refs[i - 1]; val g = groups[pair.first]; val override = androidx.media3.common.TrackSelectionOverride(g.mediaTrackGroup, listOf(pair.second)); p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().addOverride(override).build() }
-        }.show()
+
+        addAction("Audio · Auto / Default") {
+            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                .clearOverridesOfType(audioType)
+                .setTrackTypeDisabled(audioType, false)
+                .build()
+        }
+        addAction("Subtitles · Off") {
+            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                .clearOverridesOfType(textType)
+                .setTrackTypeDisabled(textType, true)
+                .build()
+        }
+        addAction("Subtitles · Auto / Default") {
+            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                .clearOverridesOfType(textType)
+                .setTrackTypeDisabled(textType, false)
+                .build()
+        }
+
+        groups.forEach { group ->
+            if (group.type != audioType && group.type != textType) return@forEach
+            for (trackIndex in 0 until group.length) {
+                val format = group.getTrackFormat(trackIndex)
+                val typeName = if (group.type == audioType) "Audio" else "Subtitle"
+                val language = format.language?.takeIf { it.isNotBlank() } ?: "Unknown language"
+                val label = format.label?.takeIf { it.isNotBlank() }
+                val codec = format.sampleMimeType?.substringAfter('/')?.uppercase(Locale.ROOT)
+                val details = listOfNotNull(label, language, codec).distinct().joinToString(" · ")
+                val selected = group.isTrackSelected(trackIndex)
+                addAction("$typeName · $details${if (selected) " ✓" else ""}") {
+                    val builder = p.trackSelectionParameters.buildUpon()
+                        .clearOverridesOfType(group.type)
+                        .setTrackTypeDisabled(group.type, false)
+                    val override = androidx.media3.common.TrackSelectionOverride(
+                        group.mediaTrackGroup, listOf(trackIndex)
+                    )
+                    p.trackSelectionParameters = builder.addOverride(override).build()
+                }
+            }
+        }
+
+        if (groups.none { it.type == audioType || it.type == textType }) {
+            Toast.makeText(this, "No alternate audio or subtitle tracks", Toast.LENGTH_SHORT).show()
+            return
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Audio and subtitles")
+            .setItems(entries.toTypedArray()) { _, index -> actions[index].invoke() }
+            .setNegativeButton("Close", null)
+            .show()
     }
     private fun enterPip() {
         if (Build.VERSION.SDK_INT >= 26) try { enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()) } catch (_: Exception) {}

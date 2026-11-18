@@ -78,13 +78,18 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.statusBarColor = bg
         window.navigationBarColor = bg
-        root = FrameLayout(this)
+        root = FrameLayout(this).apply { setBackgroundColor(bg) }
         setContentView(root)
-        if (hasVideoPermission()) loadVideos() else askPermission()
-        intent?.data?.let { uri ->
-            queue.clear()
-            queue.add(VideoFile(0, uri, uri.lastPathSegment ?: "Video", 0, 0))
-            playAt(0)
+        showLoadingScreen("Preparing your media library…")
+        try {
+            if (hasVideoPermission()) loadVideos() else askPermission()
+            intent?.data?.let { uri ->
+                queue.clear()
+                queue.add(VideoFile(0, uri, uri.lastPathSegment ?: "Video", 0, 0))
+                playAt(0)
+            }
+        } catch (error: Throwable) {
+            showErrorScreen("Startup failed", error)
         }
     }
 
@@ -113,7 +118,60 @@ class MainActivity : ComponentActivity() {
         isClickable = true; isFocusable = true; setOnClickListener { click() }
     }
 
+    private fun showLoadingScreen(message: String) {
+        root.removeAllViews()
+        root.setBackgroundColor(bg)
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(28), dp(28), dp(28), dp(28))
+        }
+        content.addView(txt("ZEKO PLAYER", 25f, Color.WHITE, true).apply {
+            gravity = Gravity.CENTER
+            letterSpacing = .08f
+        })
+        content.addView(txt(message, 13f, muted).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, dp(12), 0, 0)
+        })
+        root.addView(content, FrameLayout.LayoutParams(-1, -1))
+    }
+
+    private fun showErrorScreen(stage: String, error: Throwable) {
+        try {
+            root.removeAllViews()
+            root.setBackgroundColor(bg)
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(24), dp(28), dp(24), dp(28))
+            }
+            content.addView(txt("ZEKO PLAYER", 24f, Color.WHITE, true))
+            content.addView(txt(stage, 18f, Color.rgb(255, 170, 105), true).apply {
+                setPadding(0, dp(18), 0, dp(8))
+            })
+            content.addView(txt(error.javaClass.simpleName + ": " + (error.message ?: "No error message"), 13f, Color.WHITE).apply {
+                setPadding(0, 0, 0, dp(14))
+            })
+            content.addView(action("Try again", true) {
+                if (hasVideoPermission()) loadVideos() else askPermission()
+            })
+            val details = TextView(this).apply {
+                text = error.stackTraceToString()
+                textSize = 10f
+                setTextColor(muted)
+                setPadding(0, dp(16), 0, dp(16))
+            }
+            val detailScroll = ScrollView(this).apply { addView(details) }
+            content.addView(detailScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+            root.addView(content, FrameLayout.LayoutParams(-1, -1))
+        } catch (_: Throwable) {
+            root.removeAllViews()
+            root.setBackgroundColor(Color.BLACK)
+        }
+    }
+
     private fun loadVideos() {
+        showLoadingScreen("Scanning videos on this device…")
         videos.clear()
         val base = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         val columns = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DISPLAY_NAME,
@@ -130,8 +188,15 @@ class MainActivity : ComponentActivity() {
                         c.getString(name) ?: "Untitled video", c.getLong(duration), c.getLong(size)))
                 }
             }
-        } catch (_: Exception) {}
-        showLibrary()
+        } catch (error: Throwable) {
+            showErrorScreen("Could not read the video library", error)
+            return
+        }
+        try {
+            showLibrary()
+        } catch (error: Throwable) {
+            showErrorScreen("Could not display the video library", error)
+        }
     }
 
     private fun permissionScreen() {

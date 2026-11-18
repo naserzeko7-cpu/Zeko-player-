@@ -907,7 +907,26 @@ class MainActivity : ComponentActivity() {
         }
     }
     private fun showQueue() {
-        android.app.AlertDialog.Builder(this).setTitle("Up next").setItems(queue.map { it.title }.toTypedArray()) { _, i -> exo?.seekTo(i, 0L); exo?.play() }.setNegativeButton("Close", null).show()
+        val p = exo ?: return
+        if (queue.isEmpty()) {
+            Toast.makeText(this, "Playlist is empty", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val currentIndex = p.currentMediaItemIndex
+        val labels = queue.mapIndexed { index, item ->
+            val marker = if (index == currentIndex) "▶  " else "   "
+            marker + item.title
+        }.toTypedArray()
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Up next · ${queue.size} videos")
+            .setItems(labels) { _, index ->
+                if (index in queue.indices) {
+                    p.seekTo(index, 0L)
+                    p.play()
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
     private fun cycleSpeed() {
         val p = exo ?: return
@@ -1012,6 +1031,15 @@ class MainActivity : ComponentActivity() {
         } else if (videos.isNotEmpty()) {
             showLibrary()
         }
+    }
+
+    override fun onStop() {
+        if (!isInPictureInPictureMode && playerVisible) {
+            exo?.pause()
+            if (::playView.isInitialized) playView.text = "▶"
+            setPlayerControlsVisible(true)
+        }
+        super.onStop()
     }
 
     override fun onDestroy() {

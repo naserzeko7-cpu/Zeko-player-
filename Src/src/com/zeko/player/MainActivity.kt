@@ -141,6 +141,31 @@ class MainActivity : ComponentActivity() {
     private val permission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         if (grants.values.any { it }) loadVideos() else permissionScreen()
     }
+    private val updateInstallResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        val status = data?.getIntExtra(android.content.pm.PackageInstaller.EXTRA_STATUS, Int.MIN_VALUE)
+            ?: Int.MIN_VALUE
+        val statusMessage = data?.getStringExtra(android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE)
+        when {
+            status == android.content.pm.PackageInstaller.STATUS_SUCCESS || result.resultCode == RESULT_OK -> {
+                cleanupCompletedUpdate()
+                Toast.makeText(this, "Android confirmed the update installation.", Toast.LENGTH_LONG).show()
+            }
+            result.resultCode == RESULT_CANCELED -> {
+                Toast.makeText(this, "Update installation was cancelled. Your current version is unchanged.", Toast.LENGTH_LONG).show()
+            }
+            status != Int.MIN_VALUE -> {
+                val detail = statusMessage?.takeIf { it.isNotBlank() } ?: "Android installer status $status"
+                Toast.makeText(this, "Android could not confirm the update: $detail", Toast.LENGTH_LONG).show()
+            }
+            else -> {
+                // Some installer implementations return no result payload. Verify the installed version
+                // on the next resume instead of incorrectly reporting that installation failed.
+                mainHandler.postDelayed({ cleanupCompletedUpdate() }, 1200L)
+            }
+        }
+    }
+
     private val picker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) {
             queue.clear()
@@ -371,8 +396,9 @@ class MainActivity : ComponentActivity() {
             val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                putExtra(Intent.EXTRA_RETURN_RESULT, true)
             }
-            startActivity(installIntent)
+            updateInstallResult.launch(installIntent)
         } catch (error: Exception) {
             Toast.makeText(this, "Could not open Android installer: " + error.message, Toast.LENGTH_LONG).show()
         }

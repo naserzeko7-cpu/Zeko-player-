@@ -138,7 +138,7 @@ class MainActivity : ComponentActivity() {
         root.removeCallbacks(progressTask)
         root.removeAllViews()
         root.setBackgroundColor(bg)
-        val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false; fillViewport = true }
+        val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false; fillViewPort = true }
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(20), dp(22), dp(30)) }
         scroll.addView(body); root.addView(scroll)
 

@@ -849,32 +849,11 @@ class MainActivity : ComponentActivity() {
         }
     }
     private fun requestSeekPreview(positionMs: Long) {
-        if (kotlin.math.abs(positionMs - lastPreviewPosition) < 650L) return
+        // Keep scrubbing lightweight: decoding video frames while seeking competes
+        // with ExoPlayer's decoder and can cause visible stalls on mid-range devices.
+        if (kotlin.math.abs(positionMs - lastPreviewPosition) < 250L) return
         lastPreviewPosition = positionMs
-        val videoUri = exo?.currentMediaItem?.localConfiguration?.uri ?: return
-        val requestId = ++previewRequestId
         seekPreviewTime?.text = durationText(positionMs)
-        thumbnailExecutor.execute {
-            val bitmap = try {
-                val retriever = MediaMetadataRetriever()
-                try {
-                    retriever.setDataSource(this, videoUri)
-                    retriever.getFrameAtTime(positionMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                } finally {
-                    retriever.release()
-                }
-            } catch (_: Exception) {
-                null
-            }
-            if (bitmap != null) {
-                mainHandler.post {
-                    if (requestId == previewRequestId && dragging) {
-                        seekPreviewImage?.setImageBitmap(bitmap)
-                        seekPreviewTime?.text = durationText(positionMs)
-                    }
-                }
-            }
-        }
     }
 
     private fun toggle() {
@@ -883,7 +862,14 @@ class MainActivity : ComponentActivity() {
         playView.text = if (p.isPlaying) "Ⅱ" else "▶"
         if (p.isPlaying) scheduleControlsHide() else setPlayerControlsVisible(true)
     }
-    private fun seekBy(delta: Long) { val p = exo ?: return; p.seekTo((p.currentPosition + delta).coerceIn(0L, p.duration.coerceAtLeast(0))) }
+    private fun seekBy(delta: Long) {
+        val p = exo ?: return
+        val duration = p.duration
+        if (duration <= 0L) return
+        val target = (p.currentPosition + delta).coerceIn(0L, duration)
+        p.seekTo(target)
+        if (playerVisible) setPlayerControlsVisible(true)
+    }
     private fun previous() {
         val p = exo ?: return
         if (p.currentPosition > 3000L) {

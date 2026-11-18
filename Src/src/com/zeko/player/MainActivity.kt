@@ -808,7 +808,17 @@ class MainActivity : ComponentActivity() {
             p.seekTo(0L)
         }
     }
-    private fun next() { val p = exo ?: return; if (p.hasNextMediaItem()) p.seekToNextMediaItem() else if (queue.isNotEmpty()) p.seekTo(0, 0L) }
+    private fun next() {
+        val p = exo ?: return
+        if (p.hasNextMediaItem()) {
+            p.seekToNextMediaItem()
+        } else {
+            // Do not unexpectedly restart the playlist when the user reaches its end.
+            p.pause()
+            p.seekTo(p.duration.coerceAtLeast(0L))
+            Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
+        }
+    }
     private fun showQueue() {
         android.app.AlertDialog.Builder(this).setTitle("Up next").setItems(queue.map { it.title }.toTypedArray()) { _, i -> exo?.seekTo(i, 0L); exo?.play() }.setNegativeButton("Close", null).show()
     }

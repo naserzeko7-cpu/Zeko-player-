@@ -576,8 +576,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playVideo(video: VideoFile) {
-        queue.clear(); queue.addAll(videos)
-        playAt(queue.indexOfFirst { it.uri == video.uri }.coerceAtLeast(0))
+        queue.clear()
+        queue.addAll(videos)
+        val selectedIndex = queue.indexOfFirst { it.uri == video.uri }
+        val startIndex = if (selectedIndex >= 0) {
+            selectedIndex
+        } else {
+            // A video opened from an external picker may not be in the scanned library.
+            queue.add(0, video)
+            0
+        }
+        playAt(startIndex)
     }
     private fun playAt(index: Int) {
         if (queue.isEmpty()) return

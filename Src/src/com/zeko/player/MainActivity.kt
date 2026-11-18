@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity() {
     private var playerBottomControls: View? = null
     private val controlsHideTask = Runnable { setPlayerControlsVisible(false) }
     private val thumbnailExecutor = Executors.newFixedThreadPool(2)
+    private val libraryExecutor = Executors.newSingleThreadExecutor()
     private val updateExecutor = Executors.newSingleThreadExecutor()
     private var updateDownloadId = -1L
     private var pendingInstallUri: Uri? = null
@@ -107,8 +108,11 @@ class MainActivity : ComponentActivity() {
                             else Toast.makeText(this@MainActivity, "Downloaded update could not be opened.", Toast.LENGTH_LONG).show()
                         }
                         DownloadManager.STATUS_FAILED -> {
+                            val failedId = updateDownloadId
                             updateDownloadId = -1L
-                            Toast.makeText(this@MainActivity, "Update download failed. Please try again.", Toast.LENGTH_LONG).show()
+                            manager.remove(failedId)
+                            updatePrefs.edit().remove("download_id").remove("expected_sha256").apply()
+                            Toast.makeText(this@MainActivity, "Update download failed. Temporary file removed.", Toast.LENGTH_LONG).show()
                         }
                         else -> mainHandler.postDelayed(this, 900L)
                     }
@@ -154,6 +158,8 @@ class MainActivity : ComponentActivity() {
         window.navigationBarColor = bg
         root = FrameLayout(this).apply { setBackgroundColor(bg) }
         setContentView(root)
+        restoreUpdateState()
+        cleanupCompletedUpdate()
         showLoadingScreen("Preparing your media library…")
         try {
             if (hasVideoPermission()) loadVideos() else askPermission()
@@ -282,8 +288,13 @@ class MainActivity : ComponentActivity() {
                 .setAllowedOverMetered(true)
                 .setAllowedOverRoaming(false)
             val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+            clearPreviousUpdateDownload()
             updateDownloadId = manager.enqueue(request)
-            updatePrefs.edit().putLong("download_id", updateDownloadId).apply()
+            updatePrefs.edit()
+                .putLong("download_id", updateDownloadId)
+                .putString("expected_sha256", expectedUpdateSha256)
+                .remove("expected_version_code")
+                .apply()
             Toast.makeText(this, "Update download started. You can keep using the app.", Toast.LENGTH_LONG).show()
             mainHandler.removeCallbacks(updatePollTask)
             mainHandler.postDelayed(updatePollTask, 900L)
@@ -324,9 +335,14 @@ class MainActivity : ComponentActivity() {
                 @Suppress("DEPRECATION")
                 val newCode = if (Build.VERSION.SDK_INT >= 28) archive.longVersionCode else archive.versionCode.toLong()
                 if (newCode <= currentCode) throw IllegalStateException("Downloaded update is not newer than the installed version")
+                updatePrefs.edit().putLong("expected_version_code", newCode).apply()
                 runOnUiThread { prepareInstall(uri) }
             } catch (error: Exception) {
-                runOnUiThread { Toast.makeText(this, "Update verification failed: " + (error.message ?: "invalid APK"), Toast.LENGTH_LONG).show() }
+                val failedId = updatePrefs.getLong("download_id", -1L)
+                if (failedId >= 0L) (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).remove(failedId)
+                updatePrefs.edit().remove("download_id").remove("expected_sha256")
+                    .remove("expected_version_code").remove("pending_install_uri").apply()
+                runOnUiThread { Toast.makeText(this, "Update verification failed; temporary download removed: " + (error.message ?: "invalid APK"), Toast.LENGTH_LONG).show() }
             } finally {
                 tempFile?.delete()
             }
@@ -352,7 +368,7 @@ class MainActivity : ComponentActivity() {
 
     private fun openUpdateInstaller(uri: Uri) {
         try {
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
@@ -362,8 +378,41 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun restoreUpdateState() {
+        updateDownloadId = updatePrefs.getLong("download_id", -1L)
+        expectedUpdateSha256 = updatePrefs.getString("expected_sha256", null)
+        if (updateDownloadId >= 0L) mainHandler.post(updatePollTask)
+    }
+
+    private fun cleanupCompletedUpdate() {
+        val expectedCode = updatePrefs.getLong("expected_version_code", -1L)
+        if (expectedCode <= 0L) return
+        try {
+            @Suppress("DEPRECATION")
+            val info = packageManager.getPackageInfo(packageName, 0)
+            val installedCode = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+            if (installedCode >= expectedCode) {
+                val id = updatePrefs.getLong("download_id", -1L)
+                if (id >= 0L) (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).remove(id)
+                updateDownloadId = -1L
+                expectedUpdateSha256 = null
+                pendingInstallUri = null
+                updatePrefs.edit().clear().apply()
+            }
+        } catch (_: Exception) { }
+    }
+
+    private fun clearPreviousUpdateDownload() {
+        val oldId = updatePrefs.getLong("download_id", -1L)
+        if (oldId >= 0L) (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).remove(oldId)
+        updateDownloadId = -1L
+        pendingInstallUri = null
+        updatePrefs.edit().clear().apply()
+    }
+
     override fun onResume() {
         super.onResume()
+        cleanupCompletedUpdate()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
             (pendingInstallUri ?: updatePrefs.getString("pending_install_uri", null)?.let(Uri::parse))?.let { uri ->
                 pendingInstallUri = null
@@ -427,30 +476,35 @@ class MainActivity : ComponentActivity() {
 
     private fun loadVideos() {
         showLoadingScreen("Scanning videos on this device…")
-        videos.clear()
-        val base = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        val columns = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DISPLAY_NAME,
-            MediaStore.Video.Media.DURATION, MediaStore.Video.Media.SIZE)
-        try {
-            contentResolver.query(base, columns, null, null, MediaStore.Video.Media.DATE_ADDED + " DESC")?.use { c ->
-                val id = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-                val name = c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
-                val duration = c.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
-                val size = c.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
-                while (c.moveToNext()) {
-                    val key = c.getLong(id)
-                    videos.add(VideoFile(key, Uri.withAppendedPath(base, key.toString()),
-                        c.getString(name) ?: "Untitled video", c.getLong(duration), c.getLong(size)))
+        libraryExecutor.execute {
+            val found = mutableListOf<VideoFile>()
+            val base = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            val columns = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DISPLAY_NAME,
+                MediaStore.Video.Media.DURATION, MediaStore.Video.Media.SIZE)
+            try {
+                contentResolver.query(base, columns, null, null, MediaStore.Video.Media.DATE_ADDED + " DESC")?.use { c ->
+                    val id = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                    val name = c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+                    val duration = c.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+                    val size = c.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                    while (c.moveToNext()) {
+                        val key = c.getLong(id)
+                        found.add(VideoFile(key, Uri.withAppendedPath(base, key.toString()),
+                            c.getString(name) ?: "Untitled video", c.getLong(duration), c.getLong(size)))
+                    }
+                }
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    videos.clear()
+                    videos.addAll(found)
+                    try { showLibrary() }
+                    catch (error: Throwable) { showErrorScreen("Could not display the video library", error) }
+                }
+            } catch (error: Throwable) {
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) showErrorScreen("Could not read the video library", error)
                 }
             }
-        } catch (error: Throwable) {
-            showErrorScreen("Could not read the video library", error)
-            return
-        }
-        try {
-            showLibrary()
-        } catch (error: Throwable) {
-            showErrorScreen("Could not display the video library", error)
         }
     }
 
@@ -1290,6 +1344,7 @@ class MainActivity : ComponentActivity() {
         exo?.release()
         exo = null
         thumbnailExecutor.shutdownNow()
+        libraryExecutor.shutdownNow()
         updateExecutor.shutdownNow()
         mainHandler.removeCallbacks(updatePollTask)
         previewFuture?.cancel(true)

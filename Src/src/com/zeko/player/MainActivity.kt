@@ -498,32 +498,35 @@ class MainActivity : ComponentActivity() {
             isClickable = true; isFocusable = true
             setOnClickListener { playVideo(video) }
         }
-        val artHeight = (cardWidth * .62f).toInt()
+        val artHeight = (cardWidth * .68f).toInt()
         val art = FrameLayout(this).apply {
-            background = shape(Color.rgb(22, 39, 60), 16, Color.rgb(48, 72, 102))
+            background = shape(Color.rgb(22, 39, 60), 18, Color.rgb(48, 72, 102))
             clipToOutline = true
         }
         val posterImage = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         art.addView(posterImage, FrameLayout.LayoutParams(-1, -1))
-        loadThumbnailInto(posterImage, video, 640, 400)
+        loadThumbnailInto(posterImage, video, 720, 480)
         art.addView(View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.TRANSPARENT, Color.argb(155, 2, 8, 17)))
+                intArrayOf(Color.TRANSPARENT, Color.argb(175, 2, 8, 17)))
         }, FrameLayout.LayoutParams(-1, -1))
-        art.addView(txt("▶", 15f, Color.WHITE, true).apply {
+        // Keep the artwork unobstructed: compact play affordance in the corner.
+        art.addView(txt("▶", 12f, Color.WHITE, true).apply {
             gravity = Gravity.CENTER
-            background = shape(Color.argb(195, 7, 22, 40), 28, Color.argb(210, 107, 174, 255))
-        }, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER))
+            background = shape(Color.argb(210, 24, 119, 226), 20, Color.argb(220, 150, 205, 255))
+        }, FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP or Gravity.END).apply {
+            setMargins(0, dp(9), dp(9), 0)
+        })
         art.addView(txt(durationText(video.duration), 10f, Color.WHITE, true).apply {
-            setPadding(dp(8), dp(5), dp(8), dp(5)); background = shape(Color.argb(205, 3, 9, 17), 8)
+            setPadding(dp(8), dp(5), dp(8), dp(5)); background = shape(Color.argb(215, 3, 9, 17), 8)
         }, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.END).apply {
             setMargins(0, 0, dp(8), dp(8))
         })
         card.addView(art, LinearLayout.LayoutParams(cardWidth, artHeight))
-        card.addView(txt(video.title, 12f, Color.WHITE, true).apply {
+        card.addView(txt(video.title, 13f, Color.WHITE, true).apply {
             maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(dp(2), dp(9), dp(2), dp(4))
-        }, LinearLayout.LayoutParams(cardWidth, dp(43)))
+            setPadding(dp(2), dp(10), dp(2), dp(4))
+        }, LinearLayout.LayoutParams(cardWidth, dp(46)))
         card.addView(txt(fileSize(video.size), 10f, muted).apply { setPadding(dp(2), 0, 0, 0) })
         return card
     }

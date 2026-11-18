@@ -15,6 +15,10 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Rational
 import android.util.Size
+import android.os.Handler
+import android.os.Looper
+import android.util.LruCache
+import java.util.concurrent.Executors
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -49,6 +53,12 @@ class MainActivity : ComponentActivity() {
     private var dragging = false
     private var filter = "All videos"
     private var query = ""
+    private var playerVisible = false
+    private val thumbnailExecutor = Executors.newFixedThreadPool(2)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val thumbnailCache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -211,6 +221,7 @@ class MainActivity : ComponentActivity() {
     private fun showLibrary() {
         root.removeCallbacks(progressTask)
         exo?.removeListener(playerListener)
+        playerVisible = false
         root.removeAllViews()
         root.setBackgroundColor(bg)
 
@@ -266,12 +277,9 @@ class MainActivity : ComponentActivity() {
             clipToOutline = true
         }
         if (featured != null) {
-            thumbnail(featured, 1100, 700)?.let { bmp ->
-                hero.addView(ImageView(this).apply {
-                    setImageBitmap(bmp)
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                }, FrameLayout.LayoutParams(-1, -1))
-            }
+            val heroImage = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+            hero.addView(heroImage, FrameLayout.LayoutParams(-1, -1))
+            loadThumbnailInto(heroImage, featured, 1100, 700)
         }
         hero.addView(View(this).apply {
             background = GradientDrawable(
@@ -414,6 +422,7 @@ class MainActivity : ComponentActivity() {
         var result = videos.toList()
         if (query.isNotBlank()) result = result.filter { it.title.contains(query, true) }
         return when (filter) {
+            "Recently added" -> result.take(20)
             "Long videos" -> result.filter { it.duration >= 20 * 60 * 1000L }
             "Short clips" -> result.filter { it.duration < 5 * 60 * 1000L }
             else -> result
@@ -453,11 +462,9 @@ class MainActivity : ComponentActivity() {
             background = shape(Color.rgb(22, 39, 60), 16, Color.rgb(48, 72, 102))
             clipToOutline = true
         }
-        thumbnail(video, 640, 400)?.let { bmp ->
-            art.addView(ImageView(this).apply {
-                setImageBitmap(bmp); scaleType = ImageView.ScaleType.CENTER_CROP
-            }, FrameLayout.LayoutParams(-1, -1))
-        }
+        val posterImage = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+        art.addView(posterImage, FrameLayout.LayoutParams(-1, -1))
+        loadThumbnailInto(posterImage, video, 640, 400)
         art.addView(View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 intArrayOf(Color.TRANSPARENT, Color.argb(155, 2, 8, 17)))
@@ -480,10 +487,22 @@ class MainActivity : ComponentActivity() {
         return card
     }
 
-    private fun thumbnail(video: VideoFile, w: Int, h: Int): Bitmap? = try {
-        if (Build.VERSION.SDK_INT >= 29) contentResolver.loadThumbnail(video.uri, Size(w, h), null)
-        else MediaStore.Video.Thumbnails.getThumbnail(contentResolver, video.id, MediaStore.Video.Thumbnails.MINI_KIND, null)
-    } catch (_: Exception) { null }
+    private fun loadThumbnailInto(target: ImageView, video: VideoFile, w: Int, h: Int) {
+        val key = video.uri.toString()
+        target.tag = key
+        thumbnailCache.get(key)?.let { target.setImageBitmap(it); return }
+        target.setImageDrawable(null)
+        thumbnailExecutor.execute {
+            val bitmap = try {
+                if (Build.VERSION.SDK_INT >= 29) contentResolver.loadThumbnail(video.uri, Size(w, h), null)
+                else MediaStore.Video.Thumbnails.getThumbnail(contentResolver, video.id, MediaStore.Video.Thumbnails.MINI_KIND, null)
+            } catch (_: Exception) { null }
+            if (bitmap != null) thumbnailCache.put(key, bitmap)
+            mainHandler.post {
+                if (target.tag == key && bitmap != null) target.setImageBitmap(bitmap)
+            }
+        }
+    }
 
     private fun durationText(ms: Long): String {
         val sec = (ms / 1000).coerceAtLeast(0); val hours = sec / 3600; val mins = (sec % 3600) / 60; val seconds = sec % 60
@@ -509,6 +528,7 @@ class MainActivity : ComponentActivity() {
         root.removeCallbacks(progressTask); root.post(progressTask)
     }
     private fun showPlayer() {
+        playerVisible = true
         root.removeCallbacks(progressTask)
         root.removeAllViews()
         val metrics = resources.displayMetrics
@@ -708,11 +728,26 @@ class MainActivity : ComponentActivity() {
             for (i in 0 until frame.childCount) if (frame.getChildAt(i) !is PlayerView) frame.getChildAt(i).visibility = View.GONE
         }
     }
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (!::root.isInitialized) return
+        if (playerVisible) {
+            showPlayer()
+            playerView.player = exo
+            updatePlayer()
+            root.post(progressTask)
+        } else if (videos.isNotEmpty()) {
+            showLibrary()
+        }
+    }
+
     override fun onDestroy() {
         root.removeCallbacks(progressTask)
         exo?.removeListener(playerListener)
         exo?.release()
         exo = null
+        thumbnailExecutor.shutdownNow()
+        thumbnailCache.evictAll()
         super.onDestroy()
     }
 }

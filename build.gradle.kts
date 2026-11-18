@@ -22,6 +22,7 @@ android {
         create("zekoStable") {
             if (zekoKeystorePath != null && zekoKeystorePassword != null) {
                 storeFile = file(zekoKeystorePath)
+                storeType = "PKCS12"
                 storePassword = zekoKeystorePassword
                 keyAlias = "zeko-player"
                 keyPassword = zekoKeystorePassword

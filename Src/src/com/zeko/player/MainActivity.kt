@@ -509,45 +509,143 @@ class MainActivity : ComponentActivity() {
         root.removeCallbacks(progressTask); root.post(progressTask)
     }
     private fun showPlayer() {
+        root.removeCallbacks(progressTask)
         root.removeAllViews()
+        val metrics = resources.displayMetrics
+        val screenWidth = (metrics.widthPixels / metrics.density).toInt()
+        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val wide = screenWidth >= 700 || landscape
+
         val frame = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        playerView = PlayerView(this).apply { useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT; setShutterBackgroundColor(Color.BLACK); setKeepContentOnPlayerReset(true) }
+        playerView = PlayerView(this).apply {
+            useController = false
+            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+            setShutterBackgroundColor(Color.BLACK)
+            setKeepContentOnPlayerReset(true)
+            setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+        }
         frame.addView(playerView, FrameLayout.LayoutParams(-1, -1))
-        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(15), dp(12), dp(15), dp(12)); background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.argb(220, 3, 9, 18), Color.TRANSPARENT)) }
-        top.addView(action("‹") { exo?.pause(); showLibrary() })
-        titleView = txt("Now playing", 14f, Color.WHITE, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE; setPadding(dp(12), 0, 0, 0) }
-        top.addView(titleView, LinearLayout.LayoutParams(0, dp(46), 1f))
-        top.addView(action("CC") { chooseTracks() })
+
+        // Top glass-style navigation and media title
+        val top = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(if (wide) 22 else 14), dp(10), dp(if (wide) 22 else 14), dp(10))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.argb(225, 3, 9, 18), Color.argb(95, 3, 9, 18), Color.TRANSPARENT)
+            )
+        }
+        top.addView(action("‹", false) { exo?.pause(); showLibrary() }.apply {
+            textSize = 25f
+            setPadding(dp(13), dp(7), dp(13), dp(7))
+        })
+        titleView = txt("Now playing", 14f, Color.WHITE, true).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
+            setPadding(dp(13), 0, dp(8), 0)
+        }
+        top.addView(titleView, LinearLayout.LayoutParams(0, dp(44), 1f))
+        top.addView(action("CC", false) { chooseTracks() }.apply {
+            textSize = 11f
+            setPadding(dp(13), dp(10), dp(13), dp(10))
+        })
         frame.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
 
-        val bottom = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(17), dp(14), dp(17), dp(17)); background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(Color.argb(240, 3, 9, 18), Color.TRANSPARENT)) }
+        // Hybrid playback controls: prominent center play with precise skip controls
+        val center = LinearLayout(this).apply {
+            gravity = Gravity.CENTER
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = shape(Color.argb(105, 3, 10, 20), 34, Color.argb(70, 190, 215, 245))
+        }
+        center.addView(action("Previous", false) { previous() }.apply {
+            textSize = 11f
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        })
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(7), 1))
+        center.addView(action("↶ 10", false) { seekBy(-10000) }.apply {
+            textSize = 12f
+            setPadding(dp(12), dp(13), dp(12), dp(13))
+        })
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(9), 1))
+        playView = action("▶", true) { toggle() }.apply {
+            textSize = 22f
+            setPadding(dp(22), dp(17), dp(22), dp(17))
+            background = shape(blue, 32)
+        }
+        center.addView(playView)
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(9), 1))
+        center.addView(action("10 ↷", false) { seekBy(10000) }.apply {
+            textSize = 12f
+            setPadding(dp(12), dp(13), dp(12), dp(13))
+        })
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(7), 1))
+        center.addView(action("Next", false) { next() }.apply {
+            textSize = 11f
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        })
+        frame.addView(center, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+
+        // Bottom timeline and secondary tools
+        val bottom = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(if (wide) 24 else 16), dp(13), dp(if (wide) 24 else 16), dp(if (landscape) 9 else 15))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(Color.argb(238, 3, 9, 18), Color.argb(150, 3, 9, 18), Color.TRANSPARENT)
+            )
+        }
         seek = SeekBar(this).apply {
-            max = 1000; progressTintList = android.content.res.ColorStateList.valueOf(blue); thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            max = 1000
+            progressTintList = android.content.res.ColorStateList.valueOf(blue)
+            thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Color.argb(100, 210, 225, 245))
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onStartTrackingTouch(s: SeekBar) { dragging = true }
                 override fun onProgressChanged(s: SeekBar, p: Int, user: Boolean) {}
-                override fun onStopTrackingTouch(s: SeekBar) { val p = exo; if (p != null && p.duration > 0) p.seekTo(p.duration * s.progress / 1000L); dragging = false }
+                override fun onStopTrackingTouch(s: SeekBar) {
+                    val p = exo
+                    if (p != null && p.duration > 0) p.seekTo(p.duration * s.progress / 1000L)
+                    dragging = false
+                }
             })
         }
-        bottom.addView(seek, LinearLayout.LayoutParams(-1, dp(32)))
-        val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        timeView = txt("00:00 / 00:00", 11f, muted)
-        row.addView(timeView, LinearLayout.LayoutParams(0, dp(46), 1f))
-        row.addView(action("↶ 10") { seekBy(-10000) }); row.addView(Space(this), LinearLayout.LayoutParams(dp(6), 1))
-        playView = action("▶", true) { toggle() }; row.addView(playView)
-        row.addView(Space(this), LinearLayout.LayoutParams(dp(6), 1)); row.addView(action("10 ↷") { seekBy(10000) })
-        row.addView(Space(this), LinearLayout.LayoutParams(dp(6), 1)); row.addView(action("Next") { next() })
-        bottom.addView(row)
-        val tools = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(0, dp(9), 0, 0) }
-        tools.addView(action("Queue") { showQueue() }); tools.addView(Space(this), LinearLayout.LayoutParams(dp(7), 1))
-        tools.addView(action("Speed") { cycleSpeed() }); tools.addView(Space(this), LinearLayout.LayoutParams(dp(7), 1))
-        tools.addView(action("Fit") { cycleResize() }); tools.addView(Space(this), LinearLayout.LayoutParams(dp(7), 1))
-        tools.addView(action("PiP") { enterPip() })
-        bottom.addView(tools)
+        bottom.addView(seek, LinearLayout.LayoutParams(-1, dp(30)))
+        val info = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        timeView = txt("00:00 / 00:00", 11f, Color.rgb(207, 220, 237), true)
+        info.addView(timeView, LinearLayout.LayoutParams(0, dp(28), 1f))
+        info.addView(txt("ZEKO PLAYER", 9f, muted, true).apply { letterSpacing = .12f })
+        bottom.addView(info)
+
+        val toolScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            clipToPadding = false
+        }
+        val tools = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+        }
+        listOf(
+            action("Queue") { showQueue() },
+            action("Speed") { cycleSpeed() },
+            action("Fit") { cycleResize() },
+            action("PiP") { enterPip() }
+        ).forEach { control ->
+            tools.addView(control, LinearLayout.LayoutParams(-2, dp(37)).apply {
+                marginEnd = dp(8)
+            })
+        }
+        toolScroll.addView(tools)
+        bottom.addView(toolScroll, LinearLayout.LayoutParams(-1, dp(40)).apply {
+            topMargin = dp(5)
+        })
         frame.addView(bottom, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
         root.addView(frame)
+
         exo?.removeListener(playerListener)
         exo?.addListener(playerListener)
+        updatePlayer()
+        root.post(progressTask)
     }
     private fun updatePlayer() {
         val item = exo?.currentMediaItem
@@ -566,6 +664,12 @@ class MainActivity : ComponentActivity() {
     }
     private fun toggle() { val p = exo ?: return; if (p.isPlaying) p.pause() else p.play(); playView.text = if (p.isPlaying) "Ⅱ" else "▶" }
     private fun seekBy(delta: Long) { val p = exo ?: return; p.seekTo((p.currentPosition + delta).coerceIn(0L, p.duration.coerceAtLeast(0))) }
+    private fun previous() {
+        val p = exo ?: return
+        if (p.currentPosition > 3000L) p.seekTo(0L)
+        else if (p.hasPreviousMediaItem()) p.seekToPreviousMediaItem()
+        else if (queue.isNotEmpty()) p.seekTo(queue.lastIndex, 0L)
+    }
     private fun next() { val p = exo ?: return; if (p.hasNextMediaItem()) p.seekToNextMediaItem() else if (queue.isNotEmpty()) p.seekTo(0, 0L) }
     private fun showQueue() {
         android.app.AlertDialog.Builder(this).setTitle("Up next").setItems(queue.map { it.title }.toTypedArray()) { _, i -> exo?.seekTo(i, 0L); exo?.play() }.setNegativeButton("Close", null).show()

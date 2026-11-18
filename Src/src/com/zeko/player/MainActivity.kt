@@ -214,6 +214,11 @@ class MainActivity : ComponentActivity() {
         root.removeAllViews()
         root.setBackgroundColor(bg)
 
+        val metrics = resources.displayMetrics
+        val screenWidth = (metrics.widthPixels / metrics.density).toInt()
+        val wide = screenWidth >= 700
+        val horizontalPad = if (wide) 30 else 20
+
         val scroll = ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
             isFillViewport = true
@@ -221,106 +226,186 @@ class MainActivity : ComponentActivity() {
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(18), dp(20), dp(34))
+            setPadding(dp(horizontalPad), dp(20), dp(horizontalPad), dp(40))
         }
         scroll.addView(body)
         root.addView(scroll)
 
-        // Compact editorial header
+        // Cinematic brand bar
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        brand.addView(txt("ZEKO", 25f, Color.WHITE, true).apply { letterSpacing = .08f })
-        brand.addView(txt("PLAYER  /  YOUR MEDIA LIBRARY", 9f, muted, true).apply { letterSpacing = .12f; setPadding(0, dp(3), 0, 0) })
+        val brandMark = TextView(this).apply {
+            text = "Z"
+            textSize = 21f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            background = shape(blue, 14)
+        }
+        header.addView(brandMark, LinearLayout.LayoutParams(dp(42), dp(42)))
+        val brand = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(11), 0, 0, 0)
+        }
+        brand.addView(txt("ZEKO PLAYER", 17f, Color.WHITE, true).apply { letterSpacing = .09f })
+        brand.addView(txt("YOUR PERSONAL CINEMA", 8f, muted, true).apply {
+            letterSpacing = .15f
+            setPadding(0, dp(4), 0, 0)
+        })
         header.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(action("⌕", false) { searchDialog() })
-        header.addView(Space(this), LinearLayout.LayoutParams(dp(8), 1))
-        header.addView(action("＋", true) { picker.launch(arrayOf("video/*")) })
+        header.addView(Space(this), LinearLayout.LayoutParams(dp(9), 1))
+        header.addView(action("＋  Add", true) { picker.launch(arrayOf("video/*")) })
         body.addView(header)
-        body.addView(txt(if (videos.isEmpty()) "Your next watch starts here." else "Pick up where your curiosity takes you.", 13f, muted)
-            .apply { setPadding(0, dp(8), 0, dp(20)) })
+        body.addView(View(this).apply { setBackgroundColor(Color.rgb(34, 51, 73)) },
+            LinearLayout.LayoutParams(-1, dp(1)).apply { topMargin = dp(19); bottomMargin = dp(19) })
 
         val allItems = filteredVideos()
         val featured = allItems.firstOrNull()
         val hero = FrameLayout(this).apply {
-            background = shape(Color.rgb(17, 34, 56), 24, Color.rgb(45, 83, 130))
+            background = shape(Color.rgb(15, 31, 51), 25, Color.rgb(44, 83, 130))
             clipToOutline = true
         }
         if (featured != null) {
-            thumbnail(featured, 900, 560)?.let { bmp ->
+            thumbnail(featured, 1100, 700)?.let { bmp ->
                 hero.addView(ImageView(this).apply {
-                    setImageBitmap(bmp); scaleType = ImageView.ScaleType.CENTER_CROP; alpha = .68f
+                    setImageBitmap(bmp)
+                    scaleType = ImageView.ScaleType.CENTER_CROP
                 }, FrameLayout.LayoutParams(-1, -1))
             }
         }
         hero.addView(View(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(Color.rgb(5, 12, 23), Color.argb(205, 5, 12, 23), Color.argb(35, 5, 12, 23)))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.argb(245, 5, 12, 23), Color.argb(185, 5, 12, 23), Color.argb(20, 5, 12, 23))
+            )
         }, FrameLayout.LayoutParams(-1, -1))
+        hero.addView(View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(Color.argb(120, 4, 10, 18), Color.TRANSPARENT)
+            )
+        }, FrameLayout.LayoutParams(-1, -1))
+
         val heroContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(21), dp(20), dp(21), dp(20))
+            setPadding(dp(if (wide) 34 else 23), dp(22), dp(22), dp(22))
         }
-        heroContent.addView(txt("YOUR PERSONAL CINEMA", 9f, Color.rgb(117, 190, 255), true).apply { letterSpacing = .16f })
-        heroContent.addView(txt(featured?.title ?: "A better place\nfor your videos.", 22f, Color.WHITE, true).apply {
-            maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(0, dp(9), 0, dp(7))
+        heroContent.addView(txt("✦  FEATURED IN YOUR LIBRARY", 9f, Color.rgb(119, 190, 255), true).apply {
+            letterSpacing = .13f
         })
-        heroContent.addView(txt(if (featured == null) "Bring your videos together in one place." else
-            durationText(featured.duration) + "   •   " + fileSize(featured.size), 11f, Color.rgb(211, 225, 243)))
-        heroContent.addView(action(if (featured == null) "＋  Add your videos" else "▶   Watch now", true) {
+        heroContent.addView(txt(featured?.title ?: "Every great story\nstarts with play.", if (wide) 29f else 23f, Color.WHITE, true).apply {
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(0, dp(12), 0, dp(8))
+        })
+        heroContent.addView(txt(
+            if (featured == null) "Your videos, beautifully organised in one place."
+            else "${durationText(featured.duration)}   •   ${fileSize(featured.size)}",
+            11f, Color.rgb(211, 225, 243)
+        ))
+        heroContent.addView(action(if (featured == null) "＋  Import videos" else "▶  Play featured", true) {
             if (featured == null) picker.launch(arrayOf("video/*")) else playVideo(featured)
-        }.apply { setPadding(dp(18), dp(11), dp(18), dp(11)) },
-            LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) })
+        }.apply { setPadding(dp(19), dp(12), dp(19), dp(12)) },
+            LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(18) })
         hero.addView(heroContent, FrameLayout.LayoutParams(-1, -1))
-        body.addView(hero, LinearLayout.LayoutParams(-1, dp(226)).apply { bottomMargin = dp(22) })
+        body.addView(hero, LinearLayout.LayoutParams(-1, dp(if (wide) 270 else 238)).apply {
+            bottomMargin = dp(25)
+        })
 
-        // Filter chips
-        body.addView(txt("EXPLORE", 10f, muted, true).apply { letterSpacing = .15f; setPadding(0, 0, 0, dp(10)) })
-        val chipScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; clipToPadding = false }
+        // Quick discovery categories
+        body.addView(txt("BROWSE YOUR COLLECTION", 10f, muted, true).apply {
+            letterSpacing = .15f
+            setPadding(0, 0, 0, dp(12))
+        })
+        val chipScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            clipToPadding = false
+        }
         val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("All videos", "Recently added", "Long videos", "Short clips").forEach { item ->
-            chips.addView(action(item, filter == item) { filter = item; showLibrary() },
-                LinearLayout.LayoutParams(-2, dp(42)).apply { marginEnd = dp(8) })
+        listOf(
+            "All videos" to "▦",
+            "Recently added" to "◷",
+            "Long videos" to "▤",
+            "Short clips" to "▷"
+        ).forEach { (name, glyph) ->
+            val selected = filter == name
+            val chip = action("$glyph   $name", selected) {
+                filter = name
+                showLibrary()
+            }.apply {
+                textSize = 12f
+                setPadding(dp(15), dp(11), dp(15), dp(11))
+            }
+            chips.addView(chip, LinearLayout.LayoutParams(-2, dp(43)).apply {
+                marginEnd = dp(8)
+            })
         }
         chipScroll.addView(chips)
-        body.addView(chipScroll, LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(23) })
+        body.addView(chipScroll, LinearLayout.LayoutParams(-1, dp(46)).apply {
+            bottomMargin = dp(25)
+        })
 
         val section = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val sectionText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        sectionText.addView(txt(if (filter == "All videos") "Your library" else filter, 21f, Color.WHITE, true))
-        sectionText.addView(txt("${allItems.size} videos  ·  Stored on this device", 11f, muted).apply { setPadding(0, dp(4), 0, 0) })
+        sectionText.addView(txt(if (filter == "All videos") "Your library" else filter, 22f, Color.WHITE, true))
+        sectionText.addView(txt(
+            "${allItems.size} ${if (allItems.size == 1) "video" else "videos"}  ·  ON THIS DEVICE",
+            10f, muted
+        ).apply { letterSpacing = .04f; setPadding(0, dp(5), 0, 0) })
         section.addView(sectionText, LinearLayout.LayoutParams(0, -2, 1f))
         section.addView(action("↻", false) { loadVideos() })
-        body.addView(section, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(15) })
+        body.addView(section, LinearLayout.LayoutParams(-1, -2).apply {
+            bottomMargin = dp(17)
+        })
 
         if (allItems.isEmpty()) {
             val empty = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-                setPadding(dp(20), dp(34), dp(20), dp(34)); background = shape(panel, 22)
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(22), dp(38), dp(22), dp(38))
+                background = shape(panel, 22, Color.rgb(37, 59, 84))
             }
-            empty.addView(txt(if (videos.isEmpty()) "Your library is waiting." else "No matching videos", 18f, Color.WHITE, true)
+            empty.addView(txt(if (videos.isEmpty()) "Your cinema is ready." else "No videos found", 18f, Color.WHITE, true)
                 .apply { gravity = Gravity.CENTER })
-            empty.addView(txt(if (videos.isEmpty()) "Add videos from your device to see them here." else "Try another search or category.", 12f, muted)
-                .apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(17)) })
-            empty.addView(action(if (videos.isEmpty()) "＋  Add videos" else "Clear search", true) {
-                if (videos.isEmpty()) picker.launch(arrayOf("video/*")) else { query = ""; filter = "All videos"; showLibrary() }
+            empty.addView(txt(
+                if (videos.isEmpty()) "Import videos from your device and they’ll appear here."
+                else "Try another category or clear your search.",
+                12f, muted
+            ).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(9), 0, dp(18))
+            })
+            empty.addView(action(if (videos.isEmpty()) "＋  Import videos" else "Clear filters", true) {
+                if (videos.isEmpty()) picker.launch(arrayOf("video/*"))
+                else { query = ""; filter = "All videos"; showLibrary() }
             })
             body.addView(empty)
         } else {
-            val screenWidth = (resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt()
-            val columns = if (screenWidth >= 700) 3 else 2
-            val gap = dp(12)
-            val cardWidth = ((screenWidth - 40 - (if (columns == 3) 24 else 12)) / columns).coerceAtLeast(dp(130))
+            val columns = when {
+                screenWidth >= 1000 -> 4
+                screenWidth >= 650 -> 3
+                else -> 2
+            }
+            val gap = dp(13)
+            val available = screenWidth - horizontalPad * 2
+            val cardWidth = ((available - gap * (columns - 1)) / columns).coerceAtLeast(dp(130))
             allItems.chunked(columns).forEach { group ->
-                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.TOP }
-                group.forEach { video ->
-                    row.addView(poster(video, cardWidth), LinearLayout.LayoutParams(cardWidth, -2).apply { marginEnd = gap })
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.TOP
                 }
-                if (group.size < columns) repeat(columns - group.size) {
+                group.forEachIndexed { index, video ->
+                    row.addView(poster(video, cardWidth), LinearLayout.LayoutParams(cardWidth, -2).apply {
+                        if (index < group.lastIndex) marginEnd = gap
+                    })
+                }
+                repeat(columns - group.size) {
                     row.addView(Space(this), LinearLayout.LayoutParams(cardWidth, 1))
                 }
-                body.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(17) })
+                body.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(20)
+                })
             }
         }
     }

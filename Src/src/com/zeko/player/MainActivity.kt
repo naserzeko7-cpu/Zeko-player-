@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
             if (hasVideoPermission()) loadVideos() else askPermission()
             intent?.data?.let { uri ->
                 queue.clear()
-                queue.add(VideoFile(0, uri, uri.lastPathSegment ?: "Video", 0, 0))
+                queue.add(VideoFile(0, uri, displayName(uri), 0, 0))
                 playAt(0)
             }
         } catch (error: Throwable) {

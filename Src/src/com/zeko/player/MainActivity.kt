@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -56,6 +57,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var playView: TextView
     private lateinit var seek: SeekBar
     private lateinit var timeView: TextView
+    private var seekPreview: FrameLayout? = null
+    private var seekPreviewImage: ImageView? = null
+    private var seekPreviewTime: TextView? = null
+    private var previewRequestId = 0
+    private var lastPreviewPosition = -1L
     private var dragging = false
     private var filter = "All videos"
     private var query = ""
@@ -657,44 +663,49 @@ class MainActivity : ComponentActivity() {
         frame.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
         playerTopControls = top
 
-        // Hybrid playback controls: prominent center play with precise skip controls
+        // Minimal floating transport controls: distinct circular actions, no oversized pill.
         val compactControls = landscape
         val center = LinearLayout(this).apply {
             gravity = Gravity.CENTER
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(if (compactControls) 6 else 12), dp(if (compactControls) 5 else 8),
-                dp(if (compactControls) 6 else 12), dp(if (compactControls) 5 else 8))
-            background = shape(Color.argb(105, 3, 10, 20), 34, Color.argb(70, 190, 215, 245))
+            setPadding(dp(10), dp(9), dp(10), dp(9))
+            background = shape(Color.argb(92, 5, 12, 23), 40, Color.argb(45, 190, 215, 245))
+            elevation = dp(8).toFloat()
         }
-        center.addView(action(if (compactControls) "⏮" else "Previous", false) { previous() }.apply {
-            textSize = if (compactControls) 17f else 11f
-            setPadding(dp(if (compactControls) 8 else 12), dp(if (compactControls) 9 else 12),
-                dp(if (compactControls) 8 else 12), dp(if (compactControls) 9 else 12))
-        })
-        center.addView(Space(this), LinearLayout.LayoutParams(dp(if (compactControls) 3 else 7), 1))
-        center.addView(action(if (compactControls) "↶10" else "↶ 10", false) { seekBy(-10000) }.apply {
-            textSize = if (compactControls) 11f else 12f
-            setPadding(dp(if (compactControls) 8 else 12), dp(11), dp(if (compactControls) 8 else 12), dp(11))
-        })
-        center.addView(Space(this), LinearLayout.LayoutParams(dp(if (compactControls) 4 else 9), 1))
-        playView = action("▶", true) { toggle() }.apply {
-            textSize = if (compactControls) 19f else 22f
-            setPadding(dp(if (compactControls) 16 else 22), dp(if (compactControls) 12 else 17),
-                dp(if (compactControls) 16 else 22), dp(if (compactControls) 12 else 17))
-            background = shape(blue, 32)
+        fun roundControl(symbol: String, size: Int, primary: Boolean = false, action: () -> Unit): TextView {
+            return TextView(this).apply {
+                text = symbol
+                textSize = if (primary) 25f else 17f
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                typeface = Typeface.DEFAULT_BOLD
+                background = shape(
+                    if (primary) blue else Color.argb(155, 29, 45, 66),
+                    50,
+                    if (primary) Color.argb(150, 130, 190, 255) else Color.argb(65, 210, 228, 250)
+                )
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { action() }
+                elevation = if (primary) dp(5).toFloat() else 0f
+            }
         }
-        center.addView(playView)
-        center.addView(Space(this), LinearLayout.LayoutParams(dp(if (compactControls) 4 else 9), 1))
-        center.addView(action(if (compactControls) "10↷" else "10 ↷", false) { seekBy(10000) }.apply {
-            textSize = if (compactControls) 11f else 12f
-            setPadding(dp(if (compactControls) 8 else 12), dp(11), dp(if (compactControls) 8 else 12), dp(11))
-        })
-        center.addView(Space(this), LinearLayout.LayoutParams(dp(if (compactControls) 3 else 7), 1))
-        center.addView(action(if (compactControls) "⏭" else "Next", false) { next() }.apply {
-            textSize = if (compactControls) 17f else 11f
-            setPadding(dp(if (compactControls) 8 else 12), dp(if (compactControls) 9 else 12),
-                dp(if (compactControls) 8 else 12), dp(if (compactControls) 9 else 12))
-        })
+        val buttonSize = if (compactControls) 42 else 48
+        val mainButtonSize = if (compactControls) 56 else 64
+        center.addView(roundControl("|◀", buttonSize, false) { previous() },
+            LinearLayout.LayoutParams(dp(buttonSize), dp(buttonSize)))
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(10), 1))
+        center.addView(roundControl("↶", buttonSize, false) { seekBy(-10000) },
+            LinearLayout.LayoutParams(dp(buttonSize), dp(buttonSize)))
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(12), 1))
+        playView = roundControl("▶", mainButtonSize, true) { toggle() }
+        center.addView(playView, LinearLayout.LayoutParams(dp(mainButtonSize), dp(mainButtonSize)))
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(12), 1))
+        center.addView(roundControl("↷", buttonSize, false) { seekBy(10000) },
+            LinearLayout.LayoutParams(dp(buttonSize), dp(buttonSize)))
+        center.addView(Space(this), LinearLayout.LayoutParams(dp(10), 1))
+        center.addView(roundControl("▶|", buttonSize, false) { next() },
+            LinearLayout.LayoutParams(dp(buttonSize), dp(buttonSize)))
         val centerParams = FrameLayout.LayoutParams(-2, -2, Gravity.CENTER).apply {
             if (compactControls) {
                 leftMargin = dp(8)
@@ -720,15 +731,53 @@ class MainActivity : ComponentActivity() {
             thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
             progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Color.argb(100, 210, 225, 245))
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onStartTrackingTouch(s: SeekBar) { dragging = true }
-                override fun onProgressChanged(s: SeekBar, p: Int, user: Boolean) {}
+                override fun onStartTrackingTouch(s: SeekBar) {
+                    dragging = true
+                    lastPreviewPosition = -1L
+                    seekPreview?.visibility = View.VISIBLE
+                    scheduleControlsHide()
+                }
+                override fun onProgressChanged(s: SeekBar, p: Int, user: Boolean) {
+                    if (user && dragging) {
+                        val duration = exo?.duration ?: 0L
+                        if (duration > 0) requestSeekPreview(duration * p / 1000L)
+                    }
+                }
                 override fun onStopTrackingTouch(s: SeekBar) {
                     val p = exo
                     if (p != null && p.duration > 0) p.seekTo(p.duration * s.progress / 1000L)
                     dragging = false
+                    seekPreview?.visibility = View.GONE
+                    previewRequestId++
                 }
             })
         }
+        val preview = FrameLayout(this).apply {
+            visibility = View.GONE
+            background = shape(Color.rgb(12, 22, 36), 12, Color.argb(150, 110, 170, 235))
+            clipToOutline = true
+            elevation = dp(10).toFloat()
+        }
+        val previewImage = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(Color.rgb(20, 32, 48))
+        }
+        preview.addView(previewImage, FrameLayout.LayoutParams(-1, -1))
+        val previewTime = txt("00:00", 10f, Color.WHITE, true).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(7), dp(4), dp(7), dp(4))
+            background = shape(Color.argb(205, 3, 9, 18), 7)
+        }
+        preview.addView(previewTime, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+            bottomMargin = dp(5)
+        })
+        seekPreview = preview
+        seekPreviewImage = previewImage
+        seekPreviewTime = previewTime
+        bottom.addView(preview, LinearLayout.LayoutParams(dp(132), dp(78)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(5)
+        })
         bottom.addView(seek, LinearLayout.LayoutParams(-1, dp(if (landscape) 23 else 30)))
         val info = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         timeView = txt("00:00 / 00:00", 11f, Color.rgb(207, 220, 237), true)
@@ -799,6 +848,32 @@ class MainActivity : ComponentActivity() {
             root.postDelayed(this, 500)
         }
     }
+    private fun requestSeekPreview(positionMs: Long) {
+        if (kotlin.math.abs(positionMs - lastPreviewPosition) < 650L) return
+        lastPreviewPosition = positionMs
+        val videoUri = exo?.currentMediaItem?.localConfiguration?.uri ?: return
+        val requestId = ++previewRequestId
+        seekPreviewTime?.text = durationText(positionMs)
+        thumbnailExecutor.execute {
+            val bitmap = try {
+                MediaMetadataRetriever().use { retriever ->
+                    retriever.setDataSource(this, videoUri)
+                    retriever.getFrameAtTime(positionMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                }
+            } catch (_: Exception) {
+                null
+            }
+            if (bitmap != null) {
+                mainHandler.post {
+                    if (requestId == previewRequestId && dragging) {
+                        seekPreviewImage?.setImageBitmap(bitmap)
+                        seekPreviewTime?.text = durationText(positionMs)
+                    }
+                }
+            }
+        }
+    }
+
     private fun toggle() {
         val p = exo ?: return
         if (p.isPlaying) p.pause() else p.play()
